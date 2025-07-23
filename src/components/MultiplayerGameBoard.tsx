@@ -164,7 +164,7 @@ export function MultiplayerGameBoard({
                 <div>
                   <div className="font-medium">White</div>
                   <div className="text-sm text-muted-foreground">
-                    {gameRoom.white_player?.email || 'Waiting...'}
+                    {gameRoom.white_player_id ? 'Connected' : 'Waiting...'}
                   </div>
                   {playerConnection.color === 'white' && (
                     <Badge variant="secondary" className="text-xs">You</Badge>
@@ -181,7 +181,7 @@ export function MultiplayerGameBoard({
                 <div>
                   <div className="font-medium">Black</div>
                   <div className="text-sm text-muted-foreground">
-                    {gameRoom.black_player?.email || 'Waiting for player...'}
+                    {gameRoom.black_player_id ? 'Connected' : 'Waiting for player...'}
                   </div>
                   {playerConnection.color === 'black' && (
                     <Badge variant="secondary" className="text-xs">You</Badge>
