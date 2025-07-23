@@ -39,11 +39,11 @@ const Index = () => {
 
   // Handle URL changes for game sharing
   useEffect(() => {
-    if (gameIdFromUrl && !currentGameId) {
+    if (gameIdFromUrl) {
       setCurrentGameId(gameIdFromUrl);
       setGameMode('multi');
     }
-  }, [gameIdFromUrl, currentGameId]);
+  }, [gameIdFromUrl]);
 
   const handleGameStart = (gameId: string) => {
     setCurrentGameId(gameId);
