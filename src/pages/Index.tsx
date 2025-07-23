@@ -17,8 +17,9 @@ const Index = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const gameIdFromUrl = searchParams.get('game');
   
-  const [gameMode, setGameMode] = useState<'single' | 'multi'>(gameIdFromUrl ? 'multi' : 'single');
-  const [currentGameId, setCurrentGameId] = useState<string | null>(gameIdFromUrl);
+  // Set initial state based on URL
+  const [gameMode, setGameMode] = useState<'single' | 'multi'>('single');
+  const [currentGameId, setCurrentGameId] = useState<string | null>(null);
 
   // Single player game hook
   const singlePlayerGame = useGravityChess();
@@ -26,24 +27,30 @@ const Index = () => {
   // Multiplayer game hook
   const multiplayerGame = useMultiplayerChess(currentGameId || undefined);
 
+  // Handle URL changes for game sharing - this should run first
+  useEffect(() => {
+    console.log('URL effect - gameIdFromUrl:', gameIdFromUrl);
+    if (gameIdFromUrl) {
+      setCurrentGameId(gameIdFromUrl);
+      setGameMode('multi');
+      console.log('Set gameMode to multi and currentGameId to:', gameIdFromUrl);
+    } else {
+      setCurrentGameId(null);
+      setGameMode('single');
+    }
+  }, [gameIdFromUrl]);
+
   // Debug multiplayer state
   useEffect(() => {
     console.log('Multiplayer debug:', {
       gameMode,
       currentGameId,
+      gameIdFromUrl,
       gameRoom: multiplayerGame.gameRoom,
       playerConnection: multiplayerGame.playerConnection,
       hasGameState: !!multiplayerGame.gameState
     });
-  }, [gameMode, currentGameId, multiplayerGame.gameRoom, multiplayerGame.playerConnection, multiplayerGame.gameState]);
-
-  // Handle URL changes for game sharing
-  useEffect(() => {
-    if (gameIdFromUrl) {
-      setCurrentGameId(gameIdFromUrl);
-      setGameMode('multi');
-    }
-  }, [gameIdFromUrl]);
+  }, [gameMode, currentGameId, gameIdFromUrl, multiplayerGame.gameRoom, multiplayerGame.playerConnection, multiplayerGame.gameState]);
 
   const handleGameStart = (gameId: string) => {
     setCurrentGameId(gameId);
