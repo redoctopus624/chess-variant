@@ -93,9 +93,15 @@ function MultiplayerLobbyContent({ user, session, onGameStart }: MultiplayerLobb
 
   useEffect(() => {
     if (user) {
+      console.log('User authenticated, fetching available rooms...');
       fetchAvailableRooms();
     }
   }, [user, fetchAvailableRooms]);
+
+  // Debug: Log available rooms when they change
+  useEffect(() => {
+    console.log('Available rooms updated:', availableRooms);
+  }, [availableRooms]);
 
   const handleCreateRoom = async () => {
     setIsLoading(true);
