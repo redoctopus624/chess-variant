@@ -23,10 +23,15 @@ export function useMultiplayerChess(gameId?: string) {
         .from('game_rooms')
         .select('*')
         .eq('id', gameId)
-        .single();
+        .maybeSingle(); // Use maybeSingle to handle case where game doesn't exist
 
       if (error) {
         console.error('Error fetching game room:', error);
+        return;
+      }
+
+      if (!room) {
+        console.error('Game room not found:', gameId);
         return;
       }
 
@@ -87,6 +92,15 @@ export function useMultiplayerChess(gameId?: string) {
           };
           setPlayerConnection(connection);
           console.log('Set player connection:', connection);
+        } else {
+          // Even if user can't join, set a basic connection for viewing
+          console.log('User cannot join game, setting viewer connection');
+          setPlayerConnection({
+            userId: user.id,
+            gameId: gameId,
+            color: 'white', // Default to white for viewing
+            isConnected: false
+          });
         }
       }
     };
@@ -109,9 +123,25 @@ export function useMultiplayerChess(gameId?: string) {
           if (updatedRoom.game_state) {
             setGameState(updatedRoom.game_state as unknown as GameState);
           }
+          
+          // Update player connection if user just joined
+          setPlayerConnection(prev => {
+            if (!prev) return prev;
+            const isNowWhite = updatedRoom.white_player_id === prev.userId;
+            const isNowBlack = updatedRoom.black_player_id === prev.userId;
+            
+            if (isNowWhite && prev.color !== 'white') {
+              return { ...prev, color: 'white', isConnected: true };
+            } else if (isNowBlack && prev.color !== 'black') {
+              return { ...prev, color: 'black', isConnected: true };
+            }
+            return prev;
+          });
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Room subscription status:', status);
+      });
 
     // Subscribe to moves
     const movesSubscription = supabase
@@ -125,7 +155,9 @@ export function useMultiplayerChess(gameId?: string) {
         console.log('New move:', payload);
         // Move will be handled by game state update from game_rooms table
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Moves subscription status:', status);
+      });
 
     return () => {
       roomSubscription.unsubscribe();

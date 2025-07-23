@@ -152,7 +152,7 @@ const Index = () => {
         {gameMode === 'multi' && currentGameId && (
           <>
             {/* Show loading state while waiting for game room data */}
-            {!multiplayerGame.gameRoom || !multiplayerGame.playerConnection ? (
+            {!multiplayerGame.gameRoom ? (
               <div className="max-w-2xl mx-auto text-center py-8">
                 <div className="animate-pulse space-y-4">
                   <div className="h-4 bg-muted rounded w-3/4 mx-auto"></div>
