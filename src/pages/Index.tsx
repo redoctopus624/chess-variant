@@ -26,6 +26,17 @@ const Index = () => {
   // Multiplayer game hook
   const multiplayerGame = useMultiplayerChess(currentGameId || undefined);
 
+  // Debug multiplayer state
+  useEffect(() => {
+    console.log('Multiplayer debug:', {
+      gameMode,
+      currentGameId,
+      gameRoom: multiplayerGame.gameRoom,
+      playerConnection: multiplayerGame.playerConnection,
+      hasGameState: !!multiplayerGame.gameState
+    });
+  }, [gameMode, currentGameId, multiplayerGame.gameRoom, multiplayerGame.playerConnection, multiplayerGame.gameState]);
+
   // Handle URL changes for game sharing
   useEffect(() => {
     if (gameIdFromUrl && !currentGameId) {
@@ -117,6 +128,7 @@ const Index = () => {
             </Tabs>
           </div>
         )}
+
 
         {/* Multiplayer Game Board */}
         {gameMode === 'multi' && currentGameId && multiplayerGame.gameRoom && multiplayerGame.playerConnection && (
