@@ -57,6 +57,8 @@ export function useMultiplayerChess(gameId?: string) {
 
           if (!joinError) {
             playerColor = 'black';
+            // Update local room state immediately
+            setGameRoom(prev => prev ? { ...prev, black_player_id: user.id, status: 'active' } : null);
             toast({
               title: "Joined Game",
               description: "Successfully joined the game as Black player!"
