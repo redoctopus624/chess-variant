@@ -39,41 +39,54 @@ export function useMultiplayerChess(gameId?: string) {
       // Set player connection based on current user
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        console.log('Current user:', user.id);
+        console.log('Room white_player_id:', room.white_player_id);
+        console.log('Room black_player_id:', room.black_player_id);
+        
         let playerColor: 'white' | 'black' | null = null;
         
         if (room.white_player_id === user.id) {
           playerColor = 'white';
+          console.log('User is white player');
         } else if (room.black_player_id === user.id) {
           playerColor = 'black';
+          console.log('User is black player');
         } else if (!room.black_player_id) {
           // Auto-join as black player if room has space
-          const { error: joinError } = await supabase
+          console.log('Auto-joining as black player');
+          const { data: updatedRoom, error: joinError } = await supabase
             .from('game_rooms')
             .update({
               black_player_id: user.id,
               status: 'active'
             })
-            .eq('id', gameId);
+            .eq('id', gameId)
+            .select()
+            .single();
 
-          if (!joinError) {
+          if (!joinError && updatedRoom) {
             playerColor = 'black';
-            // Update local room state immediately
-            setGameRoom(prev => prev ? { ...prev, black_player_id: user.id, status: 'active' } : null);
+            // Update local room state immediately with the returned data
+            setGameRoom(updatedRoom as unknown as GameRoom);
+            console.log('Successfully joined as black, updated room:', updatedRoom);
             toast({
               title: "Joined Game",
               description: "Successfully joined the game as Black player!"
             });
+          } else {
+            console.error('Error joining game:', joinError);
           }
         }
 
         if (playerColor) {
-          setPlayerConnection({
+          const connection = {
             userId: user.id,
             gameId: gameId,
             color: playerColor,
             isConnected: true
-          });
-          console.log('Set player connection:', { userId: user.id, gameId, color: playerColor });
+          };
+          setPlayerConnection(connection);
+          console.log('Set player connection:', connection);
         }
       }
     };
