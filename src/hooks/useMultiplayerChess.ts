@@ -17,13 +17,11 @@ export function useMultiplayerChess(gameId?: string) {
     if (!gameId) return;
 
     const fetchGameRoom = async () => {
+      console.log('Fetching game room with ID:', gameId);
+      
       const { data: room, error } = await supabase
         .from('game_rooms')
-        .select(`
-          *,
-          white_player:white_player_id(id, email),
-          black_player:black_player_id(id, email)
-        `)
+        .select('*')
         .eq('id', gameId)
         .single();
 
@@ -32,9 +30,49 @@ export function useMultiplayerChess(gameId?: string) {
         return;
       }
 
+      console.log('Fetched game room:', room);
       setGameRoom(room as unknown as GameRoom);
       if (room.game_state) {
         setGameState(room.game_state as unknown as GameState);
+      }
+
+      // Set player connection based on current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        let playerColor: 'white' | 'black' | null = null;
+        
+        if (room.white_player_id === user.id) {
+          playerColor = 'white';
+        } else if (room.black_player_id === user.id) {
+          playerColor = 'black';
+        } else if (!room.black_player_id) {
+          // Auto-join as black player if room has space
+          const { error: joinError } = await supabase
+            .from('game_rooms')
+            .update({
+              black_player_id: user.id,
+              status: 'active'
+            })
+            .eq('id', gameId);
+
+          if (!joinError) {
+            playerColor = 'black';
+            toast({
+              title: "Joined Game",
+              description: "Successfully joined the game as Black player!"
+            });
+          }
+        }
+
+        if (playerColor) {
+          setPlayerConnection({
+            userId: user.id,
+            gameId: gameId,
+            color: playerColor,
+            isConnected: true
+          });
+          console.log('Set player connection:', { userId: user.id, gameId, color: playerColor });
+        }
       }
     };
 
