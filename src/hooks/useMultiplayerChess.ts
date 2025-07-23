@@ -23,15 +23,10 @@ export function useMultiplayerChess(gameId?: string) {
         .from('game_rooms')
         .select('*')
         .eq('id', gameId)
-        .maybeSingle(); // Use maybeSingle to handle case where game doesn't exist
+        .single();
 
       if (error) {
         console.error('Error fetching game room:', error);
-        return;
-      }
-
-      if (!room) {
-        console.error('Game room not found:', gameId);
         return;
       }
 
@@ -44,63 +39,41 @@ export function useMultiplayerChess(gameId?: string) {
       // Set player connection based on current user
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        console.log('Current user:', user.id);
-        console.log('Room white_player_id:', room.white_player_id);
-        console.log('Room black_player_id:', room.black_player_id);
-        
         let playerColor: 'white' | 'black' | null = null;
         
         if (room.white_player_id === user.id) {
           playerColor = 'white';
-          console.log('User is white player');
         } else if (room.black_player_id === user.id) {
           playerColor = 'black';
-          console.log('User is black player');
         } else if (!room.black_player_id) {
           // Auto-join as black player if room has space
-          console.log('Auto-joining as black player');
-          const { data: updatedRoom, error: joinError } = await supabase
+          const { error: joinError } = await supabase
             .from('game_rooms')
             .update({
               black_player_id: user.id,
               status: 'active'
             })
-            .eq('id', gameId)
-            .select()
-            .single();
+            .eq('id', gameId);
 
-          if (!joinError && updatedRoom) {
+          if (!joinError) {
             playerColor = 'black';
-            // Update local room state immediately with the returned data
-            setGameRoom(updatedRoom as unknown as GameRoom);
-            console.log('Successfully joined as black, updated room:', updatedRoom);
+            // Update local room state immediately
+            setGameRoom(prev => prev ? { ...prev, black_player_id: user.id, status: 'active' } : null);
             toast({
               title: "Joined Game",
               description: "Successfully joined the game as Black player!"
             });
-          } else {
-            console.error('Error joining game:', joinError);
           }
         }
 
         if (playerColor) {
-          const connection = {
+          setPlayerConnection({
             userId: user.id,
             gameId: gameId,
             color: playerColor,
             isConnected: true
-          };
-          setPlayerConnection(connection);
-          console.log('Set player connection:', connection);
-        } else {
-          // Even if user can't join, set a basic connection for viewing
-          console.log('User cannot join game, setting viewer connection');
-          setPlayerConnection({
-            userId: user.id,
-            gameId: gameId,
-            color: 'white', // Default to white for viewing
-            isConnected: false
           });
+          console.log('Set player connection:', { userId: user.id, gameId, color: playerColor });
         }
       }
     };
@@ -123,25 +96,9 @@ export function useMultiplayerChess(gameId?: string) {
           if (updatedRoom.game_state) {
             setGameState(updatedRoom.game_state as unknown as GameState);
           }
-          
-          // Update player connection if user just joined
-          setPlayerConnection(prev => {
-            if (!prev) return prev;
-            const isNowWhite = updatedRoom.white_player_id === prev.userId;
-            const isNowBlack = updatedRoom.black_player_id === prev.userId;
-            
-            if (isNowWhite && prev.color !== 'white') {
-              return { ...prev, color: 'white', isConnected: true };
-            } else if (isNowBlack && prev.color !== 'black') {
-              return { ...prev, color: 'black', isConnected: true };
-            }
-            return prev;
-          });
         }
       })
-      .subscribe((status) => {
-        console.log('Room subscription status:', status);
-      });
+      .subscribe();
 
     // Subscribe to moves
     const movesSubscription = supabase
@@ -155,9 +112,7 @@ export function useMultiplayerChess(gameId?: string) {
         console.log('New move:', payload);
         // Move will be handled by game state update from game_rooms table
       })
-      .subscribe((status) => {
-        console.log('Moves subscription status:', status);
-      });
+      .subscribe();
 
     return () => {
       roomSubscription.unsubscribe();

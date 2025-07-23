@@ -17,16 +17,9 @@ const Index = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const gameIdFromUrl = searchParams.get('game');
   
-  console.log('Index render - searchParams:', searchParams.toString());
-  console.log('Index render - gameIdFromUrl:', gameIdFromUrl);
-  
   // Set initial state based on URL
-  const [gameMode, setGameMode] = useState<'single' | 'multi'>(() => {
-    return gameIdFromUrl ? 'multi' : 'single';
-  });
-  const [currentGameId, setCurrentGameId] = useState<string | null>(() => {
-    return gameIdFromUrl || null;
-  });
+  const [gameMode, setGameMode] = useState<'single' | 'multi'>('single');
+  const [currentGameId, setCurrentGameId] = useState<string | null>(null);
 
   // Single player game hook
   const singlePlayerGame = useGravityChess();
@@ -37,19 +30,15 @@ const Index = () => {
   // Handle URL changes for game sharing - this should run first
   useEffect(() => {
     console.log('URL effect - gameIdFromUrl:', gameIdFromUrl);
-    console.log('URL effect - current gameMode:', gameMode);
-    console.log('URL effect - current currentGameId:', currentGameId);
-    
-    if (gameIdFromUrl && gameIdFromUrl !== currentGameId) {
-      console.log('Setting new game ID from URL:', gameIdFromUrl);
+    if (gameIdFromUrl) {
       setCurrentGameId(gameIdFromUrl);
       setGameMode('multi');
-    } else if (!gameIdFromUrl && gameMode === 'multi') {
-      console.log('No game ID in URL, switching to single player');
+      console.log('Set gameMode to multi and currentGameId to:', gameIdFromUrl);
+    } else {
       setCurrentGameId(null);
       setGameMode('single');
     }
-  }, [gameIdFromUrl, currentGameId, gameMode]);
+  }, [gameIdFromUrl]);
 
   // Debug multiplayer state
   useEffect(() => {
@@ -152,7 +141,7 @@ const Index = () => {
         {gameMode === 'multi' && currentGameId && (
           <>
             {/* Show loading state while waiting for game room data */}
-            {!multiplayerGame.gameRoom ? (
+            {!multiplayerGame.gameRoom || !multiplayerGame.playerConnection ? (
               <div className="max-w-2xl mx-auto text-center py-8">
                 <div className="animate-pulse space-y-4">
                   <div className="h-4 bg-muted rounded w-3/4 mx-auto"></div>
