@@ -93,6 +93,8 @@ export function useMultiplayerChess(gameId?: string) {
       return null;
     }
 
+    console.log('Creating game room for user:', user.id);
+    
     const { data: room, error } = await supabase
       .from('game_rooms')
       .insert([{
@@ -104,6 +106,8 @@ export function useMultiplayerChess(gameId?: string) {
       }])
       .select()
       .single();
+    
+    console.log('Game room creation result:', { room, error });
 
     if (error) {
       console.error('Error creating game room:', error);
@@ -275,6 +279,8 @@ export function useMultiplayerChess(gameId?: string) {
 
   // Fetch available game rooms
   const fetchAvailableRooms = useCallback(async () => {
+    console.log('Fetching available rooms...');
+    
     const { data: rooms, error } = await supabase
       .from('game_rooms')
       .select(`
@@ -284,6 +290,8 @@ export function useMultiplayerChess(gameId?: string) {
       `)
       .eq('status', 'waiting')
       .order('created_at', { ascending: false });
+
+    console.log('Fetch rooms result:', { rooms, error });
 
     if (error) {
       console.error('Error fetching rooms:', error);
