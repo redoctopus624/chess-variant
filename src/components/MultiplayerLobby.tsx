@@ -3,11 +3,10 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { useMultiplayerChess } from '@/hooks/useMultiplayerChess';
 import { useSupabase, isSupabaseConfigured } from '@/hooks/useSupabase';
 import { AuthCheck } from './AuthCheck';
-import { Users, Plus, LogIn, RefreshCw, AlertCircle } from 'lucide-react';
+import { Users, Plus, LogIn, AlertCircle } from 'lucide-react';
 import { User, Session } from '@supabase/supabase-js';
 
 interface MultiplayerLobbyProps {
@@ -77,10 +76,8 @@ function MultiplayerLobbyContent({ user, session, onGameStart }: MultiplayerLobb
   const [hasTriedAutoJoin, setHasTriedAutoJoin] = useState(false);
   
   const {
-    availableRooms,
     createGameRoom,
-    joinGameRoom,
-    fetchAvailableRooms
+    joinGameRoom
   } = useMultiplayerChess();
 
   // Auto-join game if URL contains game ID and user is authenticated
@@ -90,18 +87,6 @@ function MultiplayerLobbyContent({ user, session, onGameStart }: MultiplayerLobb
       handleJoinRoom(gameIdFromUrl);
     }
   }, [gameIdFromUrl, user, hasTriedAutoJoin]);
-
-  useEffect(() => {
-    if (user) {
-      console.log('User authenticated, fetching available rooms...');
-      fetchAvailableRooms();
-    }
-  }, [user, fetchAvailableRooms]);
-
-  // Debug: Log available rooms when they change
-  useEffect(() => {
-    console.log('Available rooms updated:', availableRooms);
-  }, [availableRooms]);
 
   const handleCreateRoom = async () => {
     setIsLoading(true);
@@ -159,8 +144,8 @@ function MultiplayerLobbyContent({ user, session, onGameStart }: MultiplayerLobb
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="text-center">
+    <div className="max-w-2xl mx-auto">
+      <div className="text-center mb-8">
         <h2 className="text-3xl font-bold mb-2">Multiplayer Lobby</h2>
         <p className="text-muted-foreground">Welcome, {user.email}!</p>
         {gameIdFromUrl && (
@@ -172,105 +157,59 @@ function MultiplayerLobbyContent({ user, session, onGameStart }: MultiplayerLobb
         )}
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Create or Join Game */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Plus className="w-5 h-5" />
-              Create Game
-            </CardTitle>
-            <CardDescription>
-              Start a new game and share the link with a friend
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      <Card>
+        <CardHeader className="text-center">
+          <CardTitle className="flex items-center justify-center gap-2">
+            <Plus className="w-5 h-5" />
+            Play Multiplayer
+          </CardTitle>
+          <CardDescription>
+            Create a new game or join with a shared link
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4">
             <Button 
               onClick={handleCreateRoom} 
               disabled={isLoading}
               className="w-full"
               size="lg"
             >
-              Create New Game
+              {isLoading ? 'Creating...' : 'Create New Game'}
             </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Join Game</CardTitle>
-            <CardDescription>
-              Enter a room ID to join an existing game
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Input
-              placeholder="Enter Room ID"
-              value={roomIdInput}
-              onChange={(e) => setRoomIdInput(e.target.value)}
-            />
-            <Button 
-              onClick={() => handleJoinRoom()}
-              disabled={isLoading || !roomIdInput.trim()}
-              className="w-full"
-            >
-              Join Game
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Available Games */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Available Games</CardTitle>
-            <CardDescription>
-              Join an open game room
-            </CardDescription>
-          </div>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={fetchAvailableRooms}
-            disabled={isLoading}
-          >
-            <RefreshCw className="w-4 h-4" />
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {availableRooms.length === 0 ? (
-            <p className="text-center py-8 text-muted-foreground">
-              No available games. Create one to get started!
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {availableRooms.map((room) => (
-                <div 
-                  key={room.id} 
-                  className="flex items-center justify-between p-4 border rounded-lg"
-                >
-                  <div>
-                    <div className="font-medium">Room {room.id}</div>
-                    <div className="text-sm text-muted-foreground">
-                      Created by: {room.white_player?.email || 'Unknown'}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Badge variant="secondary">
-                      Waiting for player
-                    </Badge>
-                    <Button 
-                      onClick={() => handleJoinRoom(room.id)}
-                      disabled={isLoading}
-                    >
-                      Join
-                    </Button>
-                  </div>
-                </div>
-              ))}
+            
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  Or join with link
+                </span>
+              </div>
             </div>
-          )}
+            
+            <div className="space-y-2">
+              <Input
+                placeholder="Paste game link or room ID here..."
+                value={roomIdInput}
+                onChange={(e) => setRoomIdInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !isLoading) {
+                    handleJoinRoom();
+                  }
+                }}
+              />
+              <Button 
+                onClick={() => handleJoinRoom()} 
+                disabled={!roomIdInput.trim() || isLoading}
+                variant="outline"
+                className="w-full"
+              >
+                {isLoading ? 'Joining...' : 'Join Game'}
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

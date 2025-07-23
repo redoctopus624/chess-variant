@@ -11,7 +11,6 @@ export function useMultiplayerChess(gameId?: string) {
   const [gameState, setGameState] = useState<GameState>(createInitialGameState());
   const [playerConnection, setPlayerConnection] = useState<PlayerConnection | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [availableRooms, setAvailableRooms] = useState<GameRoom[]>([]);
 
   // Initialize game room subscription
   useEffect(() => {
@@ -277,39 +276,14 @@ export function useMultiplayerChess(gameId?: string) {
     }
   }, [gameRoom, playerConnection, gameState, supabase]);
 
-  // Fetch available game rooms
-  const fetchAvailableRooms = useCallback(async () => {
-    console.log('Fetching available rooms...');
-    
-    const { data: rooms, error } = await supabase
-      .from('game_rooms')
-      .select(`
-        *,
-        white_player:white_player_id(id, email),
-        black_player:black_player_id(id, email)
-      `)
-      .eq('status', 'waiting')
-      .order('created_at', { ascending: false });
-
-    console.log('Fetch rooms result:', { rooms, error });
-
-    if (error) {
-      console.error('Error fetching rooms:', error);
-      return;
-    }
-
-    setAvailableRooms((rooms || []) as unknown as GameRoom[]);
-  }, [supabase]);
 
   return {
     gameRoom,
     gameState,
     playerConnection,
     isConnected,
-    availableRooms,
     createGameRoom,
     joinGameRoom,
-    makeMultiplayerMove,
-    fetchAvailableRooms
+    makeMultiplayerMove
   };
 }

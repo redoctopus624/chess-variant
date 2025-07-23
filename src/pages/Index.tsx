@@ -130,24 +130,38 @@ const Index = () => {
         )}
 
 
-        {/* Multiplayer Game Board */}
-        {gameMode === 'multi' && currentGameId && multiplayerGame.gameRoom && multiplayerGame.playerConnection && (
-          <MultiplayerGameBoard
-            gameRoom={multiplayerGame.gameRoom}
-            gameState={multiplayerGame.gameState}
-            playerConnection={multiplayerGame.playerConnection}
-            selectedSquare={singlePlayerGame.selectedSquare}
-            possibleMoves={singlePlayerGame.possibleMoves}
-            dangerousMoves={singlePlayerGame.dangerousMoves}
-            onSquareClick={handleMultiplayerMove}
-            kingInCheck={singlePlayerGame.kingInCheck}
-            lastMove={singlePlayerGame.lastMove}
-            onLeaveGame={handleLeaveGame}
-          />
+        {/* Multiplayer Game Board - Show when we have a current game ID */}
+        {gameMode === 'multi' && currentGameId && (
+          <>
+            {/* Show loading state while waiting for game room data */}
+            {!multiplayerGame.gameRoom || !multiplayerGame.playerConnection ? (
+              <div className="max-w-2xl mx-auto text-center py-8">
+                <div className="animate-pulse space-y-4">
+                  <div className="h-4 bg-muted rounded w-3/4 mx-auto"></div>
+                  <div className="h-4 bg-muted rounded w-1/2 mx-auto"></div>
+                </div>
+                <p className="text-muted-foreground mt-4">Loading game...</p>
+              </div>
+            ) : (
+              /* Show game board when room data is loaded */
+              <MultiplayerGameBoard
+                gameRoom={multiplayerGame.gameRoom}
+                gameState={multiplayerGame.gameState}
+                playerConnection={multiplayerGame.playerConnection}
+                selectedSquare={singlePlayerGame.selectedSquare}
+                possibleMoves={singlePlayerGame.possibleMoves}
+                dangerousMoves={singlePlayerGame.dangerousMoves}
+                onSquareClick={handleMultiplayerMove}
+                kingInCheck={singlePlayerGame.kingInCheck}
+                lastMove={singlePlayerGame.lastMove}
+                onLeaveGame={handleLeaveGame}
+              />
+            )}
+          </>
         )}
 
-        {/* Show multiplayer lobby if in multi mode but no active game */}
-        {gameMode === 'multi' && !multiplayerGame.gameRoom && (
+        {/* Show multiplayer lobby only if not in a specific game */}
+        {gameMode === 'multi' && !currentGameId && (
           <div className="max-w-2xl mx-auto">
             <MultiplayerLobby onGameStart={handleGameStart} />
           </div>
