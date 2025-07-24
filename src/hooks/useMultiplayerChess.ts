@@ -47,22 +47,29 @@ export function useMultiplayerChess(gameId?: string) {
           playerColor = 'black';
         } else if (!room.black_player_id) {
           // Auto-join as black player if room has space
-          const { error: joinError } = await supabase
+          console.log('Auto-joining as black player...');
+          
+          const { data: updatedRoom, error: joinError } = await supabase
             .from('game_rooms')
             .update({
               black_player_id: user.id,
               status: 'active'
             })
-            .eq('id', gameId);
+            .eq('id', gameId)
+            .select()
+            .single();
 
-          if (!joinError) {
+          if (!joinError && updatedRoom) {
             playerColor = 'black';
-            // Update local room state immediately
-            setGameRoom(prev => prev ? { ...prev, black_player_id: user.id, status: 'active' } : null);
+            // Update local room state with the actual response from database
+            setGameRoom(updatedRoom as unknown as GameRoom);
+            console.log('Successfully joined as black player:', updatedRoom);
             toast({
               title: "Joined Game",
               description: "Successfully joined the game as Black player!"
             });
+          } else {
+            console.error('Error joining as black player:', joinError);
           }
         }
 
@@ -268,13 +275,29 @@ export function useMultiplayerChess(gameId?: string) {
 
   // Make a move in multiplayer game
   const makeMultiplayerMove = useCallback(async (move: Move): Promise<boolean> => {
-    if (!gameRoom || !playerConnection) return false;
+    console.log('makeMultiplayerMove called with:', { move, gameRoom: !!gameRoom, playerConnection });
+    
+    if (!gameRoom || !playerConnection) {
+      console.log('Missing gameRoom or playerConnection:', { gameRoom: !!gameRoom, playerConnection });
+      return false;
+    }
 
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return false;
+    if (!user) {
+      console.log('No authenticated user');
+      return false;
+    }
+
+    console.log('Move validation:', {
+      currentPlayer: gameState.currentPlayer,
+      playerColor: playerConnection.color,
+      userId: user.id,
+      gameRoomId: gameRoom.id
+    });
 
     // Verify it's the player's turn
     if (gameState.currentPlayer !== playerConnection.color) {
+      console.log('Not player turn:', { currentPlayer: gameState.currentPlayer, playerColor: playerConnection.color });
       toast({
         title: "Not Your Turn",
         description: "Wait for your opponent to make their move.",
@@ -302,6 +325,13 @@ export function useMultiplayerChess(gameId?: string) {
     };
 
     try {
+      console.log('Attempting to save move to database:', {
+        game_id: gameRoom.id,
+        player_id: user.id,
+        move_data: move,
+        move_number: gameState.moveHistory.length + 1
+      });
+
       // Save the move
       const { error: moveError } = await supabase
         .from('game_moves')
@@ -312,7 +342,12 @@ export function useMultiplayerChess(gameId?: string) {
           move_number: gameState.moveHistory.length + 1
         }]);
 
-      if (moveError) throw moveError;
+      if (moveError) {
+        console.error('Error saving move:', moveError);
+        throw moveError;
+      }
+      
+      console.log('Move saved successfully, updating game room...');
 
       // Update game state
       const { error: roomError } = await supabase
@@ -324,14 +359,18 @@ export function useMultiplayerChess(gameId?: string) {
         })
         .eq('id', gameRoom.id);
 
-      if (roomError) throw roomError;
+      if (roomError) {
+        console.error('Error updating game room:', roomError);
+        throw roomError;
+      }
 
+      console.log('Game state updated successfully');
       return true;
     } catch (error) {
       console.error('Error making move:', error);
       toast({
         title: "Move Failed",
-        description: "Failed to make move. Please try again.",
+        description: `Failed to make move: ${error.message || 'Please try again.'}`,
         variant: "destructive"
       });
       return false;
