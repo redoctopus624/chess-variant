@@ -37,63 +37,31 @@ export function useMultiplayerChess(gameId?: string) {
       }
 
       // Set player connection based on current user
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) {
-        console.error('Error getting user:', userError);
-        return;
-      }
-      
-      if (!user) {
-        console.log('No authenticated user found');
-        return;
-      }
-      
-      console.log('Current user:', { id: user.id, email: user.email });
-      
-      let playerColor: 'white' | 'black' | null = null;
-        
-        console.log('Checking player assignment:', {
-          userId: user.id,
-          whitePlayerId: room.white_player_id,
-          blackPlayerId: room.black_player_id,
-          status: room.status
-        });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        let playerColor: 'white' | 'black' | null = null;
         
         if (room.white_player_id === user.id) {
           playerColor = 'white';
-          console.log('User is white player');
         } else if (room.black_player_id === user.id) {
           playerColor = 'black';
-          console.log('User is black player');
         } else if (!room.black_player_id) {
           // Auto-join as black player if room has space
-          console.log('Auto-joining as black player...');
-          
-          const { data: updatedRoom, error: joinError } = await supabase
+          const { error: joinError } = await supabase
             .from('game_rooms')
             .update({
               black_player_id: user.id,
               status: 'active'
             })
-            .eq('id', gameId)
-            .select()
-            .single();
+            .eq('id', gameId);
 
-          if (!joinError && updatedRoom) {
+          if (!joinError) {
             playerColor = 'black';
-            // Update local room state with the actual response from database
-            setGameRoom(updatedRoom as unknown as GameRoom);
-            console.log('Successfully joined as black player:', updatedRoom);
+            // Update local room state immediately
+            setGameRoom(prev => prev ? { ...prev, black_player_id: user.id, status: 'active' } : null);
             toast({
               title: "Joined Game",
               description: "Successfully joined the game as Black player!"
-            });
-          } else {
-            console.error('Error joining as black player:', joinError);
-            toast({
-              title: "Failed to Join",
-              description: "Could not join the game. Please try refreshing.",
-              variant: "destructive"
             });
           }
         }
@@ -106,9 +74,8 @@ export function useMultiplayerChess(gameId?: string) {
             isConnected: true
           });
           console.log('Set player connection:', { userId: user.id, gameId, color: playerColor });
-        } else {
-          console.log('No player color assigned - user is not part of this game');
         }
+      }
     };
 
     fetchGameRoom();
@@ -301,29 +268,13 @@ export function useMultiplayerChess(gameId?: string) {
 
   // Make a move in multiplayer game
   const makeMultiplayerMove = useCallback(async (move: Move): Promise<boolean> => {
-    console.log('makeMultiplayerMove called with:', { move, gameRoom: !!gameRoom, playerConnection });
-    
-    if (!gameRoom || !playerConnection) {
-      console.log('Missing gameRoom or playerConnection:', { gameRoom: !!gameRoom, playerConnection });
-      return false;
-    }
+    if (!gameRoom || !playerConnection) return false;
 
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      console.log('No authenticated user');
-      return false;
-    }
-
-    console.log('Move validation:', {
-      currentPlayer: gameState.currentPlayer,
-      playerColor: playerConnection.color,
-      userId: user.id,
-      gameRoomId: gameRoom.id
-    });
+    if (!user) return false;
 
     // Verify it's the player's turn
     if (gameState.currentPlayer !== playerConnection.color) {
-      console.log('Not player turn:', { currentPlayer: gameState.currentPlayer, playerColor: playerConnection.color });
       toast({
         title: "Not Your Turn",
         description: "Wait for your opponent to make their move.",
@@ -351,13 +302,6 @@ export function useMultiplayerChess(gameId?: string) {
     };
 
     try {
-      console.log('Attempting to save move to database:', {
-        game_id: gameRoom.id,
-        player_id: user.id,
-        move_data: move,
-        move_number: gameState.moveHistory.length + 1
-      });
-
       // Save the move
       const { error: moveError } = await supabase
         .from('game_moves')
@@ -368,12 +312,7 @@ export function useMultiplayerChess(gameId?: string) {
           move_number: gameState.moveHistory.length + 1
         }]);
 
-      if (moveError) {
-        console.error('Error saving move:', moveError);
-        throw moveError;
-      }
-      
-      console.log('Move saved successfully, updating game room...');
+      if (moveError) throw moveError;
 
       // Update game state
       const { error: roomError } = await supabase
@@ -385,18 +324,14 @@ export function useMultiplayerChess(gameId?: string) {
         })
         .eq('id', gameRoom.id);
 
-      if (roomError) {
-        console.error('Error updating game room:', roomError);
-        throw roomError;
-      }
+      if (roomError) throw roomError;
 
-      console.log('Game state updated successfully');
       return true;
     } catch (error) {
       console.error('Error making move:', error);
       toast({
         title: "Move Failed",
-        description: `Failed to make move: ${error.message || 'Please try again.'}`,
+        description: "Failed to make move. Please try again.",
         variant: "destructive"
       });
       return false;
