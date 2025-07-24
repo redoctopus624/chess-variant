@@ -88,13 +88,35 @@ export function useMultiplayerChess(gameId?: string) {
         schema: 'public',
         table: 'game_rooms',
         filter: `id=eq.${gameId}`
-      }, (payload) => {
+      }, async (payload) => {
         console.log('Game room update:', payload);
         if (payload.new && typeof payload.new === 'object') {
           const updatedRoom = payload.new as unknown as GameRoom;
           setGameRoom(updatedRoom);
           if (updatedRoom.game_state) {
             setGameState(updatedRoom.game_state as unknown as GameState);
+          }
+          
+          // Update player connection when room changes (e.g., second player joins)
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            let playerColor: 'white' | 'black' | null = null;
+            
+            if (updatedRoom.white_player_id === user.id) {
+              playerColor = 'white';
+            } else if (updatedRoom.black_player_id === user.id) {
+              playerColor = 'black';
+            }
+
+            if (playerColor) {
+              setPlayerConnection({
+                userId: user.id,
+                gameId: gameId!,
+                color: playerColor,
+                isConnected: true
+              });
+              console.log('Updated player connection from room subscription:', { userId: user.id, gameId, color: playerColor });
+            }
           }
         }
       })

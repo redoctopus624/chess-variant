@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RotateCcw, Users, User } from 'lucide-react';
 import { useGravityChess } from '@/hooks/useGravityChess';
 import { useMultiplayerChess } from '@/hooks/useMultiplayerChess';
+import { useMultiplayerGameLogic } from '@/hooks/useMultiplayerGameLogic';
 
 const Index = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -26,6 +27,12 @@ const Index = () => {
 
   // Multiplayer game hook
   const multiplayerGame = useMultiplayerChess(currentGameId || undefined);
+  
+  // Multiplayer game logic (separate from single player)
+  const multiplayerGameLogic = useMultiplayerGameLogic(
+    multiplayerGame.gameState, 
+    multiplayerGame.playerConnection?.color || 'white'
+  );
 
   // Handle URL changes for game sharing - this should run first
   useEffect(() => {
@@ -69,36 +76,16 @@ const Index = () => {
   const handleMultiplayerMove = async (row: number, col: number) => {
     if (!multiplayerGame.gameRoom || !multiplayerGame.playerConnection) return;
 
-    const { gameState } = multiplayerGame;
-    const clickedPiece = gameState.board[row][col];
-    const targetPosition = { row, col };
-
-    // Check if we have a selected square and this is a valid move
-    if (singlePlayerGame.selectedSquare && 
-        singlePlayerGame.possibleMoves.some(pos => pos.row === row && pos.col === col)) {
-      
-      const piece = gameState.board[singlePlayerGame.selectedSquare.row][singlePlayerGame.selectedSquare.col];
-      
-      if (piece) {
-        const move = {
-          from: singlePlayerGame.selectedSquare,
-          to: targetPosition,
-          piece,
-          capturedPiece: clickedPiece || undefined
-        };
-
-        const success = await multiplayerGame.makeMultiplayerMove(move);
-        
-        if (success) {
-          // Clear selection after successful move
-          singlePlayerGame.handleSquareClick(-1, -1);
-        }
-        return;
+    // Use the dedicated multiplayer game logic
+    const result = multiplayerGameLogic.handleSquareClick(row, col);
+    
+    if (result.isMove && result.move) {
+      const success = await multiplayerGame.makeMultiplayerMove(result.move);
+      if (!success) {
+        // If move failed, we might want to re-select the piece
+        console.log('Move failed, keeping selection');
       }
     }
-    
-    // Handle piece selection using single player logic for move validation
-    singlePlayerGame.handleSquareClick(row, col);
   };
 
   return (
@@ -155,12 +142,12 @@ const Index = () => {
                 gameRoom={multiplayerGame.gameRoom}
                 gameState={multiplayerGame.gameState}
                 playerConnection={multiplayerGame.playerConnection}
-                selectedSquare={singlePlayerGame.selectedSquare}
-                possibleMoves={singlePlayerGame.possibleMoves}
-                dangerousMoves={singlePlayerGame.dangerousMoves}
+                selectedSquare={multiplayerGameLogic.selectedSquare}
+                possibleMoves={multiplayerGameLogic.possibleMoves}
+                dangerousMoves={multiplayerGameLogic.dangerousMoves}
                 onSquareClick={handleMultiplayerMove}
-                kingInCheck={singlePlayerGame.kingInCheck}
-                lastMove={singlePlayerGame.lastMove}
+                kingInCheck={multiplayerGameLogic.kingInCheck}
+                lastMove={multiplayerGameLogic.lastMove}
                 onLeaveGame={handleLeaveGame}
               />
             )}
