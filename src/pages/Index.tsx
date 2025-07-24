@@ -128,13 +128,25 @@ const Index = () => {
         {gameMode === 'multi' && currentGameId && (
           <>
             {/* Show loading state while waiting for game room data */}
-            {!multiplayerGame.gameRoom || !multiplayerGame.playerConnection ? (
+            {!multiplayerGame.gameRoom ? (
               <div className="max-w-2xl mx-auto text-center py-8">
                 <div className="animate-pulse space-y-4">
                   <div className="h-4 bg-muted rounded w-3/4 mx-auto"></div>
                   <div className="h-4 bg-muted rounded w-1/2 mx-auto"></div>
                 </div>
                 <p className="text-muted-foreground mt-4">Loading game...</p>
+              </div>
+            ) : !multiplayerGame.playerConnection ? (
+              <div className="max-w-2xl mx-auto text-center py-8">
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Unable to Join Game</h3>
+                  <p className="text-muted-foreground">
+                    Could not connect to this game. Please check the link or try refreshing the page.
+                  </p>
+                  <Button onClick={handleLeaveGame}>
+                    Back to Lobby
+                  </Button>
+                </div>
               </div>
             ) : (
               /* Show game board when room data is loaded */

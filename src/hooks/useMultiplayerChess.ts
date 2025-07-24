@@ -37,14 +37,34 @@ export function useMultiplayerChess(gameId?: string) {
       }
 
       // Set player connection based on current user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        let playerColor: 'white' | 'black' | null = null;
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        console.error('Error getting user:', userError);
+        return;
+      }
+      
+      if (!user) {
+        console.log('No authenticated user found');
+        return;
+      }
+      
+      console.log('Current user:', { id: user.id, email: user.email });
+      
+      let playerColor: 'white' | 'black' | null = null;
+        
+        console.log('Checking player assignment:', {
+          userId: user.id,
+          whitePlayerId: room.white_player_id,
+          blackPlayerId: room.black_player_id,
+          status: room.status
+        });
         
         if (room.white_player_id === user.id) {
           playerColor = 'white';
+          console.log('User is white player');
         } else if (room.black_player_id === user.id) {
           playerColor = 'black';
+          console.log('User is black player');
         } else if (!room.black_player_id) {
           // Auto-join as black player if room has space
           console.log('Auto-joining as black player...');
@@ -70,6 +90,11 @@ export function useMultiplayerChess(gameId?: string) {
             });
           } else {
             console.error('Error joining as black player:', joinError);
+            toast({
+              title: "Failed to Join",
+              description: "Could not join the game. Please try refreshing.",
+              variant: "destructive"
+            });
           }
         }
 
@@ -81,8 +106,9 @@ export function useMultiplayerChess(gameId?: string) {
             isConnected: true
           });
           console.log('Set player connection:', { userId: user.id, gameId, color: playerColor });
+        } else {
+          console.log('No player color assigned - user is not part of this game');
         }
-      }
     };
 
     fetchGameRoom();
