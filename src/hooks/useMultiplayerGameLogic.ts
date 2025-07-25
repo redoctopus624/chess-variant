@@ -9,37 +9,37 @@ import {
   isValidPosition
 } from '@/utils/chess';
 
-export function useMultiplayerGameLogic(gameState: GameState, playerColor: 'white' | 'black') {
+export function useMultiplayerGameLogic(
+  gameState: GameState, 
+  playerColor: 'white' | 'black',
+  isMyTurn: boolean,
+  onMove: (move: Move) => Promise<boolean>
+) {
   const [selectedSquare, setSelectedSquare] = useState<Position | null>(null);
   const [possibleMoves, setPossibleMoves] = useState<Position[]>([]);
   const [dangerousMoves, setDangerousMoves] = useState<Position[]>([]);
 
   // Check if a move would put own king in check after gravity
   const wouldPutOwnKingInCheck = useCallback((from: Position, to: Position, piece: Piece): boolean => {
-    // Create a temporary board with the proposed move
     const tempBoard = cloneBoard(gameState.board);
     tempBoard[to.row][to.col] = piece;
     tempBoard[from.row][from.col] = null;
     
-    // Apply gravity to see the final state
     const boardAfterGravity = applyGravity(tempBoard);
     
-    // Check if the king is under attack after gravity
     const kingPosition = findKing(boardAfterGravity, playerColor);
-    if (!kingPosition) return true; // If no king found, something is wrong
+    if (!kingPosition) return true;
     
     const enemyColor = playerColor === 'white' ? 'black' : 'white';
     return isSquareUnderAttack(boardAfterGravity, kingPosition, enemyColor);
   }, [gameState.board, playerColor]);
 
-  // Validate gravity move (similar to single player logic)
+  // Validate gravity move
   const validateGravityMove = useCallback((from: Position, to: Position, piece: Piece): boolean => {
     if (!isValidPosition(to.row, to.col)) return false;
     
-    // Get basic piece moves
     const basicMoves = getValidMoves(gameState.board, from, piece, gameState.enPassantTarget, gameState.castlingRights);
     
-    // Check if the target position is a valid basic move
     const isBasicMoveValid = basicMoves.some(move => move.to.row === to.row && move.to.col === to.col);
     if (!isBasicMoveValid) return false;
     
@@ -49,13 +49,20 @@ export function useMultiplayerGameLogic(gameState: GameState, playerColor: 'whit
     tempBoard[from.row][from.col] = null;
     const boardAfterGravity = applyGravity(tempBoard);
     
-    // Move is valid if piece ends up in a valid position after gravity
     return boardAfterGravity[to.row][to.col] === piece || 
            (piece.type === 'p' && to.row >= 4 && boardAfterGravity[4][to.col] === piece) ||
            (piece.type === 'p' && to.row <= 3 && boardAfterGravity[3][to.col] === piece);
   }, [gameState.board, gameState.enPassantTarget, gameState.castlingRights]);
 
-  const handleSquareClick = useCallback((row: number, col: number) => {
+  const handleSquareClick = useCallback(async (row: number, col: number) => {
+    // Don't allow moves if it's not the player's turn
+    if (!isMyTurn) {
+      setSelectedSquare(null);
+      setPossibleMoves([]);
+      setDangerousMoves([]);
+      return { isMove: false, move: null };
+    }
+
     const clickedPiece = gameState.board[row][col];
     const targetPosition = { row, col };
 
@@ -72,19 +79,22 @@ export function useMultiplayerGameLogic(gameState: GameState, playerColor: 'whit
       const piece = gameState.board[selectedSquare.row][selectedSquare.col];
       
       if (piece) {
-        const move = {
+        const move: Move = {
           from: selectedSquare,
           to: targetPosition,
           piece,
           capturedPiece: clickedPiece || undefined
         };
 
-        // Clear selection
+        // Clear selection immediately
         setSelectedSquare(null);
         setPossibleMoves([]);
         setDangerousMoves([]);
         
-        return { isMove: true, move };
+        // Attempt to make the move
+        const success = await onMove(move);
+        
+        return { isMove: true, move, success };
       }
     }
 
@@ -122,7 +132,7 @@ export function useMultiplayerGameLogic(gameState: GameState, playerColor: 'whit
     }
 
     return { isMove: false, move: null };
-  }, [gameState.board, gameState.enPassantTarget, gameState.castlingRights, gameState.currentPlayer, selectedSquare, possibleMoves, playerColor, validateGravityMove, wouldPutOwnKingInCheck]);
+  }, [gameState, playerColor, isMyTurn, selectedSquare, possibleMoves, validateGravityMove, wouldPutOwnKingInCheck, onMove]);
 
   // Check if king is in check
   const kingInCheck = useMemo(() => {

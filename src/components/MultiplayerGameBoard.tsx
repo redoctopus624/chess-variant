@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { ChessBoard } from '@/components/ChessBoard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,13 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { GameRoom, PlayerConnection } from '@/types/multiplayer';
 import { GameState, Position } from '@/types/chess';
-import { Users, Crown, Clock, ArrowLeft, Copy, Share } from 'lucide-react';
+import { Users, Crown, Clock, ArrowLeft, Copy, Share, Wifi, WifiOff } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 interface MultiplayerGameBoardProps {
   gameRoom: GameRoom;
   gameState: GameState;
   playerConnection: PlayerConnection;
+  playerPresence: { white: boolean; black: boolean };
   selectedSquare: Position | null;
   possibleMoves: Position[];
   dangerousMoves: Position[];
@@ -27,6 +27,7 @@ export function MultiplayerGameBoard({
   gameRoom,
   gameState,
   playerConnection,
+  playerPresence,
   selectedSquare,
   possibleMoves,
   dangerousMoves,
@@ -84,7 +85,7 @@ export function MultiplayerGameBoard({
         
         <div className="text-center">
           <h2 className="text-2xl font-bold">Multiplayer Game</h2>
-          <p className="text-muted-foreground">Room: {gameRoom.id}</p>
+          <p className="text-muted-foreground text-sm">Room: {gameRoom.id.slice(0, 8)}</p>
         </div>
 
         <Badge variant={gameRoom.status === 'active' ? 'default' : 'secondary'}>
@@ -110,7 +111,7 @@ export function MultiplayerGameBoard({
 
         {/* Game Info Sidebar */}
         <div className="space-y-4">
-          {/* Share Game Link */}
+          {/* Share Game Link - Only show if waiting for players */}
           {gameRoom.status === 'waiting' && (
             <Card>
               <CardHeader className="pb-3">
@@ -121,7 +122,7 @@ export function MultiplayerGameBoard({
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  Share this link with your friend to start playing:
+                  Share this link with your friend:
                 </p>
                 <div className="flex gap-2">
                   <Input
@@ -158,34 +159,60 @@ export function MultiplayerGameBoard({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              {/* White Player */}
               <div className={`flex items-center justify-between p-3 rounded-lg ${
                 gameState.currentPlayer === 'white' ? 'bg-blue-50 border border-blue-200' : 'bg-muted'
               }`}>
-                <div>
-                  <div className="font-medium">White</div>
-                  <div className="text-sm text-muted-foreground">
-                    {gameRoom.white_player_id ? 'Connected' : 'Waiting...'}
+                <div className="flex items-center gap-2">
+                  <div>
+                    <div className="font-medium flex items-center gap-2">
+                      White
+                      {playerPresence.white ? (
+                        <Wifi className="w-3 h-3 text-green-600" />
+                      ) : (
+                        <WifiOff className="w-3 h-3 text-gray-400" />
+                      )}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {gameRoom.white_player_id ? 
+                        (playerPresence.white ? 'Online' : 'Offline') : 
+                        'Waiting...'
+                      }
+                    </div>
+                    {playerConnection.color === 'white' && (
+                      <Badge variant="secondary" className="text-xs">You</Badge>
+                    )}
                   </div>
-                  {playerConnection.color === 'white' && (
-                    <Badge variant="secondary" className="text-xs">You</Badge>
-                  )}
                 </div>
                 {gameState.currentPlayer === 'white' && (
                   <Crown className="w-4 h-4 text-blue-600" />
                 )}
               </div>
 
+              {/* Black Player */}
               <div className={`flex items-center justify-between p-3 rounded-lg ${
                 gameState.currentPlayer === 'black' ? 'bg-blue-50 border border-blue-200' : 'bg-muted'
               }`}>
-                <div>
-                  <div className="font-medium">Black</div>
-                  <div className="text-sm text-muted-foreground">
-                    {gameRoom.black_player_id ? 'Connected' : 'Waiting for player...'}
+                <div className="flex items-center gap-2">
+                  <div>
+                    <div className="font-medium flex items-center gap-2">
+                      Black
+                      {playerPresence.black ? (
+                        <Wifi className="w-3 h-3 text-green-600" />
+                      ) : (
+                        <WifiOff className="w-3 h-3 text-gray-400" />
+                      )}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {gameRoom.black_player_id ? 
+                        (playerPresence.black ? 'Online' : 'Offline') : 
+                        'Waiting for player...'
+                      }
+                    </div>
+                    {playerConnection.color === 'black' && (
+                      <Badge variant="secondary" className="text-xs">You</Badge>
+                    )}
                   </div>
-                  {playerConnection.color === 'black' && (
-                    <Badge variant="secondary" className="text-xs">You</Badge>
-                  )}
                 </div>
                 {gameState.currentPlayer === 'black' && (
                   <Crown className="w-4 h-4 text-blue-600" />
@@ -237,27 +264,6 @@ export function MultiplayerGameBoard({
               </CardContent>
             </Card>
           )}
-
-          {/* Connection Status */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle>Connection</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span>You</span>
-                  <Badge variant="default">Connected</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Opponent</span>
-                  <Badge variant={gameRoom.status === 'active' ? 'default' : 'secondary'}>
-                    {gameRoom.status === 'active' ? 'Connected' : 'Waiting'}
-                  </Badge>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
     </div>

@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useMultiplayerChess } from '@/hooks/useMultiplayerChess';
+import { useMultiplayerCore } from '@/hooks/useMultiplayerCore';
 import { useSupabase, isSupabaseConfigured } from '@/hooks/useSupabase';
 import { AuthCheck } from './AuthCheck';
 import { Users, Plus, LogIn, AlertCircle } from 'lucide-react';
@@ -78,7 +78,7 @@ function MultiplayerLobbyContent({ user, session, onGameStart }: MultiplayerLobb
   const {
     createGameRoom,
     joinGameRoom
-  } = useMultiplayerChess();
+  } = useMultiplayerCore();
 
   // Auto-join game if URL contains game ID and user is authenticated
   useEffect(() => {

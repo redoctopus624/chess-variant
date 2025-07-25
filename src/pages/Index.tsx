@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RotateCcw, Users, User } from 'lucide-react';
 import { useGravityChess } from '@/hooks/useGravityChess';
-import { useMultiplayerChess } from '@/hooks/useMultiplayerChess';
+import { useMultiplayerCore } from '@/hooks/useMultiplayerCore';
 import { useMultiplayerGameLogic } from '@/hooks/useMultiplayerGameLogic';
 
 const Index = () => {
@@ -25,13 +25,32 @@ const Index = () => {
   // Single player game hook
   const singlePlayerGame = useGravityChess();
 
-  // Multiplayer game hook
-  const multiplayerGame = useMultiplayerChess(currentGameId || undefined);
-  
-  // Multiplayer game logic (separate from single player)
-  const multiplayerGameLogic = useMultiplayerGameLogic(
-    multiplayerGame.gameState, 
-    multiplayerGame.playerConnection?.color || 'white'
+  // Multiplayer game hooks
+  const {
+    gameRoom,
+    gameState: multiplayerGameState,
+    playerConnection,
+    playerPresence,
+    isConnected,
+    createGameRoom,
+    joinGameRoom,
+    makeMove: makeMultiplayerMove
+  } = useMultiplayerCore(currentGameId);
+
+  const isMyTurn = playerConnection && multiplayerGameState.currentPlayer === playerConnection.color;
+
+  const {
+    selectedSquare: multiplayerSelectedSquare,
+    possibleMoves: multiplayerPossibleMoves,
+    dangerousMoves: multiplayerDangerousMoves,
+    kingInCheck: multiplayerKingInCheck,
+    lastMove: multiplayerLastMove,
+    handleSquareClick: handleMultiplayerSquareClick
+  } = useMultiplayerGameLogic(
+    multiplayerGameState,
+    playerConnection?.color || 'white',
+    !!isMyTurn,
+    makeMultiplayerMove
   );
 
   // Handle URL changes for game sharing - this should run first
@@ -53,11 +72,11 @@ const Index = () => {
       gameMode,
       currentGameId,
       gameIdFromUrl,
-      gameRoom: multiplayerGame.gameRoom,
-      playerConnection: multiplayerGame.playerConnection,
-      hasGameState: !!multiplayerGame.gameState
+      gameRoom,
+      playerConnection,
+      hasGameState: !!multiplayerGameState
     });
-  }, [gameMode, currentGameId, gameIdFromUrl, multiplayerGame.gameRoom, multiplayerGame.playerConnection, multiplayerGame.gameState]);
+  }, [gameMode, currentGameId, gameIdFromUrl, gameRoom, playerConnection, multiplayerGameState]);
 
   const handleGameStart = (gameId: string) => {
     setCurrentGameId(gameId);
@@ -74,18 +93,7 @@ const Index = () => {
   };
 
   const handleMultiplayerMove = async (row: number, col: number) => {
-    if (!multiplayerGame.gameRoom || !multiplayerGame.playerConnection) return;
-
-    // Use the dedicated multiplayer game logic
-    const result = multiplayerGameLogic.handleSquareClick(row, col);
-    
-    if (result.isMove && result.move) {
-      const success = await multiplayerGame.makeMultiplayerMove(result.move);
-      if (!success) {
-        // If move failed, we might want to re-select the piece
-        console.log('Move failed, keeping selection');
-      }
-    }
+    await handleMultiplayerSquareClick(row, col);
   };
 
   return (
@@ -128,7 +136,7 @@ const Index = () => {
         {gameMode === 'multi' && currentGameId && (
           <>
             {/* Show loading state while waiting for game room data */}
-            {!multiplayerGame.gameRoom || !multiplayerGame.playerConnection ? (
+            {!gameRoom || !playerConnection ? (
               <div className="max-w-2xl mx-auto text-center py-8">
                 <div className="animate-pulse space-y-4">
                   <div className="h-4 bg-muted rounded w-3/4 mx-auto"></div>
@@ -139,15 +147,16 @@ const Index = () => {
             ) : (
               /* Show game board when room data is loaded */
               <MultiplayerGameBoard
-                gameRoom={multiplayerGame.gameRoom}
-                gameState={multiplayerGame.gameState}
-                playerConnection={multiplayerGame.playerConnection}
-                selectedSquare={multiplayerGameLogic.selectedSquare}
-                possibleMoves={multiplayerGameLogic.possibleMoves}
-                dangerousMoves={multiplayerGameLogic.dangerousMoves}
+                gameRoom={gameRoom}
+                gameState={multiplayerGameState}
+                playerConnection={playerConnection}
+                playerPresence={playerPresence}
+                selectedSquare={multiplayerSelectedSquare}
+                possibleMoves={multiplayerPossibleMoves}
+                dangerousMoves={multiplayerDangerousMoves}
                 onSquareClick={handleMultiplayerMove}
-                kingInCheck={multiplayerGameLogic.kingInCheck}
-                lastMove={multiplayerGameLogic.lastMove}
+                kingInCheck={multiplayerKingInCheck}
+                lastMove={multiplayerLastMove}
                 onLeaveGame={handleLeaveGame}
               />
             )}
