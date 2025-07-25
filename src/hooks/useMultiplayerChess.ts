@@ -47,22 +47,36 @@ export function useMultiplayerChess(gameId?: string) {
           playerColor = 'black';
         } else if (!room.black_player_id) {
           // Auto-join as black player if room has space
-          const { error: joinError } = await supabase
+          console.log('Attempting to join as black player...');
+          const { data: updatedRoom, error: joinError } = await supabase
             .from('game_rooms')
             .update({
               black_player_id: user.id,
               status: 'active'
             })
-            .eq('id', gameId);
+            .eq('id', gameId)
+            .eq('black_player_id', null) // Ensure we only update if black_player_id is still null
+            .select()
+            .single();
 
-          if (!joinError) {
+          if (!joinError && updatedRoom) {
             playerColor = 'black';
-            // Update local room state immediately
-            setGameRoom(prev => prev ? { ...prev, black_player_id: user.id, status: 'active' } : null);
+            console.log('Successfully joined as black player:', updatedRoom);
+            // Update local room state with the actual updated room data
+            setGameRoom(updatedRoom as unknown as GameRoom);
             toast({
               title: "Joined Game",
               description: "Successfully joined the game as Black player!"
             });
+          } else {
+            console.error('Failed to join as black player:', joinError);
+            if (joinError) {
+              toast({
+                title: "Failed to Join",
+                description: "Unable to join the game. It may be full.",
+                variant: "destructive"
+              });
+            }
           }
         }
 
@@ -233,19 +247,22 @@ export function useMultiplayerChess(gameId?: string) {
     }
 
     // Join as black player
-    const { error } = await supabase
+    const { data: updatedRoom, error } = await supabase
       .from('game_rooms')
       .update({
         black_player_id: user.id,
         status: 'active'
       })
-      .eq('id', roomId);
+      .eq('id', roomId)
+      .eq('black_player_id', null) // Ensure we only update if black_player_id is still null
+      .select()
+      .single();
 
-    if (error) {
+    if (error || !updatedRoom) {
       console.error('Error joining game room:', error);
       toast({
         title: "Error",
-        description: "Failed to join game room.",
+        description: "Failed to join game room. It may already be full.",
         variant: "destructive"
       });
       return false;
