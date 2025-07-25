@@ -21,6 +21,8 @@ interface MultiplayerGameBoardProps {
   kingInCheck: Position | null;
   lastMove: { from: Position; to: Position } | null;
   onLeaveGame: () => void;
+  connectedPlayers: any[];
+  isOpponentConnected: boolean;
 }
 
 export function MultiplayerGameBoard({
@@ -33,7 +35,9 @@ export function MultiplayerGameBoard({
   onSquareClick,
   kingInCheck,
   lastMove,
-  onLeaveGame
+  onLeaveGame,
+  connectedPlayers,
+  isOpponentConnected
 }: MultiplayerGameBoardProps) {
   const isMyTurn = gameState.currentPlayer === playerConnection.color;
   const isFlipped = playerConnection.color === 'black';
@@ -164,7 +168,9 @@ export function MultiplayerGameBoard({
                 <div>
                   <div className="font-medium">White</div>
                   <div className="text-sm text-muted-foreground">
-                    {gameRoom.white_player_id ? 'Connected' : 'Waiting...'}
+                    {gameRoom.white_player_id ? (
+                      connectedPlayers.some(p => p.color === 'white') ? 'Online' : 'Offline'
+                    ) : 'Waiting...'}
                   </div>
                   {playerConnection.color === 'white' && (
                     <Badge variant="secondary" className="text-xs">You</Badge>
@@ -181,7 +187,9 @@ export function MultiplayerGameBoard({
                 <div>
                   <div className="font-medium">Black</div>
                   <div className="text-sm text-muted-foreground">
-                    {gameRoom.black_player_id ? 'Connected' : 'Waiting for player...'}
+                    {gameRoom.black_player_id ? (
+                      connectedPlayers.some(p => p.color === 'black') ? 'Online' : 'Offline'
+                    ) : 'Waiting for player...'}
                   </div>
                   {playerConnection.color === 'black' && (
                     <Badge variant="secondary" className="text-xs">You</Badge>
@@ -251,8 +259,8 @@ export function MultiplayerGameBoard({
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Opponent</span>
-                  <Badge variant={gameRoom.status === 'active' ? 'default' : 'secondary'}>
-                    {gameRoom.status === 'active' ? 'Connected' : 'Waiting'}
+                  <Badge variant={isOpponentConnected ? 'default' : 'secondary'}>
+                    {isOpponentConnected ? 'Online' : 'Offline'}
                   </Badge>
                 </div>
               </div>
