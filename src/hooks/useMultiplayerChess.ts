@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSupabase } from './useSupabase';
-import { useMultiplayerPresence } from './useMultiplayerPresence';
 import { GameRoom, GameMove, PlayerConnection } from '@/types/multiplayer';
 import { GameState, Move, PieceColor } from '@/types/chess';
 import { createInitialGameState, applyGravity, cloneBoard } from '@/utils/chess';
@@ -12,9 +11,6 @@ export function useMultiplayerChess(gameId?: string) {
   const [gameState, setGameState] = useState<GameState>(createInitialGameState());
   const [playerConnection, setPlayerConnection] = useState<PlayerConnection | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  
-  // Initialize presence tracking
-  const presence = useMultiplayerPresence(gameId || null, playerConnection?.color || null);
 
   // Initialize game room subscription
   useEffect(() => {
@@ -51,61 +47,38 @@ export function useMultiplayerChess(gameId?: string) {
           playerColor = 'black';
         } else if (!room.black_player_id) {
           // Auto-join as black player if room has space
-          console.log('Attempting to join as black player...');
-          const { data: updatedRoom, error: joinError } = await supabase
+          const { error: joinError } = await supabase
             .from('game_rooms')
             .update({
               black_player_id: user.id,
               status: 'active'
             })
-            .eq('id', gameId)
-            .eq('black_player_id', null) // Ensure room is still available
-            .select()
-            .single();
+            .eq('id', gameId);
 
-          if (!joinError && updatedRoom) {
+          if (!joinError) {
             playerColor = 'black';
-            console.log('Successfully joined as black player:', updatedRoom);
-            // Update local room state with the actual updated data
-            setGameRoom(updatedRoom as unknown as GameRoom);
+            // Update local room state immediately
+            setGameRoom(prev => prev ? { ...prev, black_player_id: user.id, status: 'active' } : null);
             toast({
               title: "Joined Game",
               description: "Successfully joined the game as Black player!"
-            });
-          } else {
-            console.error('Failed to join as black player:', joinError);
-            toast({
-              title: "Join Failed",
-              description: "Could not join the game. It may be full.",
-              variant: "destructive"
             });
           }
         }
 
         if (playerColor) {
-          const connection = {
+          setPlayerConnection({
             userId: user.id,
             gameId: gameId,
             color: playerColor,
             isConnected: true
-          };
-          setPlayerConnection(connection);
-          console.log('Set player connection:', connection);
-          
-          // Start presence tracking
-          const cleanup = await presence.trackPresence(user.id, playerColor);
-          
-          // Store cleanup function for later use
-          return cleanup;
+          });
+          console.log('Set player connection:', { userId: user.id, gameId, color: playerColor });
         }
       }
     };
 
-    let presenceCleanup: (() => void) | undefined;
-    
-    fetchGameRoom().then((cleanup) => {
-      if (cleanup) presenceCleanup = cleanup;
-    });
+    fetchGameRoom();
 
     // Subscribe to game room changes
     const roomSubscription = supabase
@@ -136,19 +109,13 @@ export function useMultiplayerChess(gameId?: string) {
             }
 
             if (playerColor) {
-              const connection = {
+              setPlayerConnection({
                 userId: user.id,
                 gameId: gameId!,
                 color: playerColor,
                 isConnected: true
-              };
-              setPlayerConnection(connection);
-              console.log('Updated player connection from room subscription:', connection);
-              
-              // Start presence tracking if not already tracking
-              if (!presence.isTrackingPresence) {
-                presence.trackPresence(user.id, playerColor);
-              }
+              });
+              console.log('Updated player connection from room subscription:', { userId: user.id, gameId, color: playerColor });
             }
           }
         }
@@ -170,11 +137,8 @@ export function useMultiplayerChess(gameId?: string) {
       .subscribe();
 
     return () => {
-      console.log('Cleaning up multiplayer subscriptions');
       roomSubscription.unsubscribe();
       movesSubscription.unsubscribe();
-      if (presenceCleanup) presenceCleanup();
-      presence.stopTracking();
     };
   }, [gameId, supabase]);
 
@@ -216,16 +180,12 @@ export function useMultiplayerChess(gameId?: string) {
       return null;
     }
 
-    const connection = {
+    setPlayerConnection({
       userId: user.id,
       gameId: room.id,
-      color: 'white' as const,
+      color: 'white',
       isConnected: true
-    };
-    setPlayerConnection(connection);
-    
-    // Start presence tracking for room creator
-    presence.trackPresence(user.id, 'white');
+    });
 
     toast({
       title: "Game Room Created",
@@ -291,16 +251,12 @@ export function useMultiplayerChess(gameId?: string) {
       return false;
     }
 
-    const connection = {
+    setPlayerConnection({
       userId: user.id,
       gameId: roomId,
-      color: 'black' as const,
+      color: 'black',
       isConnected: true
-    };
-    setPlayerConnection(connection);
-    
-    // Start presence tracking for joining player
-    presence.trackPresence(user.id, 'black');
+    });
 
     toast({
       title: "Joined Game",
@@ -390,7 +346,6 @@ export function useMultiplayerChess(gameId?: string) {
     isConnected,
     createGameRoom,
     joinGameRoom,
-    makeMultiplayerMove,
-    presence
+    makeMultiplayerMove
   };
 }

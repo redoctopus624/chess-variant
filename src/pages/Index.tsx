@@ -149,8 +149,6 @@ const Index = () => {
                 kingInCheck={multiplayerGameLogic.kingInCheck}
                 lastMove={multiplayerGameLogic.lastMove}
                 onLeaveGame={handleLeaveGame}
-                connectedPlayers={multiplayerGame.presence.connectedPlayers}
-                isOpponentConnected={multiplayerGame.presence.isOpponentConnected()}
               />
             )}
           </>
