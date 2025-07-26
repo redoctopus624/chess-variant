@@ -1,99 +1,88 @@
-
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ChessBoard } from '@/components/ChessBoard';
 import { GameControls } from '@/components/GameControls';
 import { GameInfo } from '@/components/GameInfo';
 import { PromotionDialog } from '@/components/PromotionDialog';
-import { MultiplayerLobby } from '@/components/MultiplayerLobby';
-import { MultiplayerGameBoard } from '@/components/MultiplayerGameBoard';
+import { SimpleLobby } from '@/components/SimpleLobby';
+import { SimpleGameBoard } from '@/components/SimpleGameBoard';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RotateCcw, Users, User } from 'lucide-react';
 import { useGravityChess } from '@/hooks/useGravityChess';
-import { useMultiplayerCore } from '@/hooks/useMultiplayerCore';
-import { useMultiplayerGameLogic } from '@/hooks/useMultiplayerGameLogic';
+import { useSimpleMultiplayer } from '@/hooks/useSimpleMultiplayer';
+import { useSimpleGameLogic } from '@/hooks/useSimpleGameLogic';
 
 const Index = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const gameIdFromUrl = searchParams.get('game');
+  const sessionIdFromUrl = searchParams.get('game');
   
   // Set initial state based on URL
   const [gameMode, setGameMode] = useState<'single' | 'multi'>('single');
-  const [currentGameId, setCurrentGameId] = useState<string | null>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
   // Single player game hook
   const singlePlayerGame = useGravityChess();
 
-  // Multiplayer game hooks
+  // Multiplayer hooks
   const {
-    gameRoom,
+    gameSession,
     gameState: multiplayerGameState,
-    playerConnection,
+    playerInfo,
     playerPresence,
     isConnected,
-    createGameRoom,
-    joinGameRoom,
-    makeMove: makeMultiplayerMove
-  } = useMultiplayerCore(currentGameId);
+    createSession,
+    joinSession,
+    makeMove
+  } = useSimpleMultiplayer(currentSessionId);
 
-  const isMyTurn = playerConnection && multiplayerGameState.currentPlayer === playerConnection.color;
+  const isMyTurn = playerInfo && multiplayerGameState.currentPlayer === playerInfo.color;
 
   const {
-    selectedSquare: multiplayerSelectedSquare,
-    possibleMoves: multiplayerPossibleMoves,
-    dangerousMoves: multiplayerDangerousMoves,
-    kingInCheck: multiplayerKingInCheck,
-    lastMove: multiplayerLastMove,
-    handleSquareClick: handleMultiplayerSquareClick
-  } = useMultiplayerGameLogic(
+    selectedSquare,
+    possibleMoves,
+    dangerousMoves,
+    kingInCheck,
+    lastMove,
+    handleSquareClick
+  } = useSimpleGameLogic(
     multiplayerGameState,
-    playerConnection?.color || 'white',
+    playerInfo?.color || null,
     !!isMyTurn,
-    makeMultiplayerMove
+    makeMove
   );
 
-  // Handle URL changes for game sharing - this should run first
+  // Handle URL changes for game sharing
   useEffect(() => {
-    console.log('URL effect - gameIdFromUrl:', gameIdFromUrl);
-    if (gameIdFromUrl) {
-      setCurrentGameId(gameIdFromUrl);
+    if (sessionIdFromUrl) {
+      setCurrentSessionId(sessionIdFromUrl);
       setGameMode('multi');
-      console.log('Set gameMode to multi and currentGameId to:', gameIdFromUrl);
     } else {
-      setCurrentGameId(null);
+      setCurrentSessionId(null);
       setGameMode('single');
     }
-  }, [gameIdFromUrl]);
+  }, [sessionIdFromUrl]);
 
-  // Debug multiplayer state
-  useEffect(() => {
-    console.log('Multiplayer debug:', {
-      gameMode,
-      currentGameId,
-      gameIdFromUrl,
-      gameRoom,
-      playerConnection,
-      hasGameState: !!multiplayerGameState
-    });
-  }, [gameMode, currentGameId, gameIdFromUrl, gameRoom, playerConnection, multiplayerGameState]);
-
-  const handleGameStart = (gameId: string) => {
-    setCurrentGameId(gameId);
+  const handleCreateGame = () => {
+    const sessionId = createSession();
+    setCurrentSessionId(sessionId);
     setGameMode('multi');
-    // Update URL to make it shareable
-    setSearchParams({ game: gameId });
+    setSearchParams({ game: sessionId });
+  };
+
+  const handleJoinGame = (sessionId: string) => {
+    const success = joinSession(sessionId);
+    if (success) {
+      setCurrentSessionId(sessionId);
+      setGameMode('multi');
+      setSearchParams({ game: sessionId });
+    }
   };
 
   const handleLeaveGame = () => {
-    setCurrentGameId(null);
+    setCurrentSessionId(null);
     setGameMode('single');
-    // Clear URL params
     setSearchParams({});
-  };
-
-  const handleMultiplayerMove = async (row: number, col: number) => {
-    await handleMultiplayerSquareClick(row, col);
   };
 
   return (
@@ -110,7 +99,7 @@ const Index = () => {
         </div>
 
         {/* Game Mode Selection - only show if not in a specific game */}
-        {!currentGameId && (
+        {!currentSessionId && (
           <div className="max-w-2xl mx-auto mb-8">
             <Tabs value={gameMode} onValueChange={(value) => setGameMode(value as 'single' | 'multi')}>
               <TabsList className="grid w-full grid-cols-2">
@@ -125,49 +114,30 @@ const Index = () => {
               </TabsList>
               
               <TabsContent value="multi" className="mt-6">
-                <MultiplayerLobby onGameStart={handleGameStart} />
+                <SimpleLobby 
+                  onCreateGame={handleCreateGame}
+                  onJoinGame={handleJoinGame}
+                />
               </TabsContent>
             </Tabs>
           </div>
         )}
 
-
-        {/* Multiplayer Game Board - Show when we have a current game ID */}
-        {gameMode === 'multi' && currentGameId && (
-          <>
-            {/* Show loading state while waiting for game room data */}
-            {!gameRoom || !playerConnection ? (
-              <div className="max-w-2xl mx-auto text-center py-8">
-                <div className="animate-pulse space-y-4">
-                  <div className="h-4 bg-muted rounded w-3/4 mx-auto"></div>
-                  <div className="h-4 bg-muted rounded w-1/2 mx-auto"></div>
-                </div>
-                <p className="text-muted-foreground mt-4">Loading game...</p>
-              </div>
-            ) : (
-              /* Show game board when room data is loaded */
-              <MultiplayerGameBoard
-                gameRoom={gameRoom}
-                gameState={multiplayerGameState}
-                playerConnection={playerConnection}
-                playerPresence={playerPresence}
-                selectedSquare={multiplayerSelectedSquare}
-                possibleMoves={multiplayerPossibleMoves}
-                dangerousMoves={multiplayerDangerousMoves}
-                onSquareClick={handleMultiplayerMove}
-                kingInCheck={multiplayerKingInCheck}
-                lastMove={multiplayerLastMove}
-                onLeaveGame={handleLeaveGame}
-              />
-            )}
-          </>
-        )}
-
-        {/* Show multiplayer lobby only if not in a specific game */}
-        {gameMode === 'multi' && !currentGameId && (
-          <div className="max-w-2xl mx-auto">
-            <MultiplayerLobby onGameStart={handleGameStart} />
-          </div>
+        {/* Multiplayer Game */}
+        {gameMode === 'multi' && currentSessionId && gameSession && playerInfo && (
+          <SimpleGameBoard
+            gameSession={gameSession}
+            gameState={multiplayerGameState}
+            playerInfo={playerInfo}
+            playerPresence={playerPresence}
+            selectedSquare={selectedSquare}
+            possibleMoves={possibleMoves}
+            dangerousMoves={dangerousMoves}
+            onSquareClick={handleSquareClick}
+            kingInCheck={kingInCheck}
+            lastMove={lastMove}
+            onLeaveGame={handleLeaveGame}
+          />
         )}
 
         {/* Single Player Game */}

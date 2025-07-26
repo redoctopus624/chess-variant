@@ -1,36 +1,23 @@
-
-export type GameRoom = {
+export type GameSession = {
   id: string;
-  created_at?: string;
-  updated_at?: string;
-  white_player_id: string | null;
-  black_player_id: string | null;
-  current_player: 'white' | 'black';
-  game_state: any; // Will store our GameState JSON
-  status: 'waiting' | 'active' | 'completed' | 'abandoned';
-  winner: 'white' | 'black' | null;
-  white_player?: {
-    id: string;
-    email?: string;
-  };
-  black_player?: {
-    id: string;
-    email?: string;
-  };
+  gameState: any;
+  whitePlayerId: string | null;
+  blackPlayerId: string | null;
+  currentPlayer: 'white' | 'black';
+  lastMoveAt: number;
+  createdAt: number;
 };
 
-export type GameMove = {
-  id?: string;
-  game_id: string;
-  player_id: string;
-  move_data: any; // Will store our Move JSON
-  move_number: number;
-  created_at?: string;
-};
-
-export type PlayerConnection = {
-  userId: string;
-  gameId: string;
-  color: 'white' | 'black';
+export type PlayerInfo = {
+  id: string;
+  sessionId: string;
+  color: 'white' | 'black' | null;
   isConnected: boolean;
+};
+
+export type MultiplayerMove = {
+  sessionId: string;
+  playerId: string;
+  moveData: any;
+  timestamp: number;
 };

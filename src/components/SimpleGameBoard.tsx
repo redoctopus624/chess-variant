@@ -4,15 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { GameRoom, PlayerConnection } from '@/types/multiplayer';
+import { GameSession, PlayerInfo } from '@/types/multiplayer';
 import { GameState, Position } from '@/types/chess';
-import { Users, Crown, Clock, ArrowLeft, Copy, Share, Wifi, WifiOff } from 'lucide-react';
+import { Users, Crown, ArrowLeft, Copy, Share, Wifi, WifiOff } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
-interface MultiplayerGameBoardProps {
-  gameRoom: GameRoom;
+interface SimpleGameBoardProps {
+  gameSession: GameSession;
   gameState: GameState;
-  playerConnection: PlayerConnection;
+  playerInfo: PlayerInfo;
   playerPresence: { white: boolean; black: boolean };
   selectedSquare: Position | null;
   possibleMoves: Position[];
@@ -23,10 +23,10 @@ interface MultiplayerGameBoardProps {
   onLeaveGame: () => void;
 }
 
-export function MultiplayerGameBoard({
-  gameRoom,
+export function SimpleGameBoard({
+  gameSession,
   gameState,
-  playerConnection,
+  playerInfo,
   playerPresence,
   selectedSquare,
   possibleMoves,
@@ -35,10 +35,10 @@ export function MultiplayerGameBoard({
   kingInCheck,
   lastMove,
   onLeaveGame
-}: MultiplayerGameBoardProps) {
-  const isMyTurn = gameState.currentPlayer === playerConnection.color;
-  const isFlipped = playerConnection.color === 'black';
-  const gameUrl = `${window.location.origin}?game=${gameRoom.id}`;
+}: SimpleGameBoardProps) {
+  const isMyTurn = gameState.currentPlayer === playerInfo.color;
+  const isFlipped = playerInfo.color === 'black';
+  const gameUrl = `${window.location.origin}?game=${gameSession.id}`;
 
   const copyGameLink = async () => {
     try {
@@ -74,6 +74,8 @@ export function MultiplayerGameBoard({
     }
   };
 
+  const needsSecondPlayer = !gameSession.blackPlayerId;
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Game Header */}
@@ -85,11 +87,11 @@ export function MultiplayerGameBoard({
         
         <div className="text-center">
           <h2 className="text-2xl font-bold">Multiplayer Game</h2>
-          <p className="text-muted-foreground text-sm">Room: {gameRoom.id.slice(0, 8)}</p>
+          <p className="text-muted-foreground text-sm">Room: {gameSession.id.slice(-8)}</p>
         </div>
 
-        <Badge variant={gameRoom.status === 'active' ? 'default' : 'secondary'}>
-          {gameRoom.status}
+        <Badge variant={needsSecondPlayer ? 'secondary' : 'default'}>
+          {needsSecondPlayer ? 'Waiting for Player' : 'Active'}
         </Badge>
       </div>
 
@@ -111,8 +113,8 @@ export function MultiplayerGameBoard({
 
         {/* Game Info Sidebar */}
         <div className="space-y-4">
-          {/* Share Game Link - Only show if waiting for players */}
-          {gameRoom.status === 'waiting' && (
+          {/* Share Game Link - Show if waiting for players */}
+          {needsSecondPlayer && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -174,12 +176,12 @@ export function MultiplayerGameBoard({
                       )}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {gameRoom.white_player_id ? 
+                      {gameSession.whitePlayerId ? 
                         (playerPresence.white ? 'Online' : 'Offline') : 
                         'Waiting...'
                       }
                     </div>
-                    {playerConnection.color === 'white' && (
+                    {playerInfo.color === 'white' && (
                       <Badge variant="secondary" className="text-xs">You</Badge>
                     )}
                   </div>
@@ -204,12 +206,12 @@ export function MultiplayerGameBoard({
                       )}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {gameRoom.black_player_id ? 
+                      {gameSession.blackPlayerId ? 
                         (playerPresence.black ? 'Online' : 'Offline') : 
                         'Waiting for player...'
                       }
                     </div>
-                    {playerConnection.color === 'black' && (
+                    {playerInfo.color === 'black' && (
                       <Badge variant="secondary" className="text-xs">You</Badge>
                     )}
                   </div>
@@ -225,7 +227,6 @@ export function MultiplayerGameBoard({
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
-                <Clock className="w-5 h-5" />
                 Turn Status
               </CardTitle>
             </CardHeader>
@@ -237,7 +238,7 @@ export function MultiplayerGameBoard({
                 <Badge variant={isMyTurn ? 'default' : 'secondary'}>
                   {isMyTurn ? 'Your Turn' : 'Opponent\'s Turn'}
                 </Badge>
-                {gameRoom.status === 'waiting' && (
+                {needsSecondPlayer && (
                   <p className="text-sm text-muted-foreground">
                     Waiting for second player to join...
                   </p>
