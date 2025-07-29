@@ -1,23 +1,11 @@
-export type GameSession = {
-  id: string;
-  gameState: any;
-  whitePlayerId: string | null;
-  blackPlayerId: string | null;
-  currentPlayer: 'white' | 'black';
-  lastMoveAt: number;
-  createdAt: number;
+import { Database } from "@/integrations/supabase/types";
+import { GameState } from "./chess";
+
+export type GameSession = Database['public']['Tables']['game_rooms']['Row'] & {
+  game_state: GameState; // Ensure game_state is strongly typed
 };
 
 export type PlayerInfo = {
   id: string;
-  sessionId: string;
-  color: 'white' | 'black' | null;
-  isConnected: boolean;
-};
-
-export type MultiplayerMove = {
-  sessionId: string;
-  playerId: string;
-  moveData: any;
-  timestamp: number;
+  color: 'white' | 'black' | 'spectator';
 };

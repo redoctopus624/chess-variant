@@ -74,11 +74,10 @@ export function SimpleGameBoard({
     }
   };
 
-  const needsSecondPlayer = !gameSession.blackPlayerId;
+  const needsSecondPlayer = !gameSession.black_player_id;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      {/* Game Header */}
       <div className="flex items-center justify-between">
         <Button variant="outline" onClick={onLeaveGame}>
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -87,16 +86,15 @@ export function SimpleGameBoard({
         
         <div className="text-center">
           <h2 className="text-2xl font-bold">Multiplayer Game</h2>
-          <p className="text-muted-foreground text-sm">Room: {gameSession.id.slice(-8)}</p>
+          <p className="text-muted-foreground text-sm">Room: {gameSession.id.slice(0, 8)}</p>
         </div>
 
-        <Badge variant={needsSecondPlayer ? 'secondary' : 'default'}>
-          {needsSecondPlayer ? 'Waiting for Player' : 'Active'}
+        <Badge variant={gameSession.status === 'waiting' ? 'secondary' : 'default'}>
+          {gameSession.status}
         </Badge>
       </div>
 
       <div className="grid lg:grid-cols-4 gap-6">
-        {/* Game Board */}
         <div className="lg:col-span-3">
           <ChessBoard
             board={gameState.board}
@@ -111,9 +109,7 @@ export function SimpleGameBoard({
           />
         </div>
 
-        {/* Game Info Sidebar */}
         <div className="space-y-4">
-          {/* Share Game Link - Show if waiting for players */}
           {needsSecondPlayer && (
             <Card>
               <CardHeader className="pb-3">
@@ -152,7 +148,6 @@ export function SimpleGameBoard({
             </Card>
           )}
 
-          {/* Players */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -161,7 +156,6 @@ export function SimpleGameBoard({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {/* White Player */}
               <div className={`flex items-center justify-between p-3 rounded-lg ${
                 gameState.currentPlayer === 'white' ? 'bg-blue-50 border border-blue-200' : 'bg-muted'
               }`}>
@@ -176,10 +170,7 @@ export function SimpleGameBoard({
                       )}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {gameSession.whitePlayerId ? 
-                        (playerPresence.white ? 'Online' : 'Offline') : 
-                        'Waiting...'
-                      }
+                      {playerPresence.white ? 'Online' : 'Offline'}
                     </div>
                     {playerInfo.color === 'white' && (
                       <Badge variant="secondary" className="text-xs">You</Badge>
@@ -191,7 +182,6 @@ export function SimpleGameBoard({
                 )}
               </div>
 
-              {/* Black Player */}
               <div className={`flex items-center justify-between p-3 rounded-lg ${
                 gameState.currentPlayer === 'black' ? 'bg-blue-50 border border-blue-200' : 'bg-muted'
               }`}>
@@ -206,7 +196,7 @@ export function SimpleGameBoard({
                       )}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {gameSession.blackPlayerId ? 
+                      {gameSession.black_player_id ? 
                         (playerPresence.black ? 'Online' : 'Offline') : 
                         'Waiting for player...'
                       }
@@ -223,7 +213,6 @@ export function SimpleGameBoard({
             </CardContent>
           </Card>
 
-          {/* Current Turn */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -247,7 +236,6 @@ export function SimpleGameBoard({
             </CardContent>
           </Card>
 
-          {/* Game Status */}
           {gameState.gameOver && (
             <Card>
               <CardHeader className="pb-3">
