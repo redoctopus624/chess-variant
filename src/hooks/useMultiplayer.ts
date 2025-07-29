@@ -23,37 +23,14 @@ export function useMultiplayer() {
 
   const gameState = gameSession?.game_state as GameState | null;
 
-  const makeMove = useCallback(async (from: Position, to: Position) => {
-    if (!gameSession || !gameState || playerColor === 'spectator' || gameState.currentPlayer !== playerColor) return;
-
-    const piece = gameState.board[from.row][from.col];
-    if (!piece) return;
-
-    const newBoard = cloneBoard(gameState.board);
-    newBoard[to.row][to.col] = piece;
-    newBoard[from.row][from.col] = null;
-    const boardWithGravity = applyGravity(newBoard);
-
-    const move: Move = { from, to, piece };
-    const newGameState: GameState = {
-      ...gameState,
-      board: boardWithGravity,
-      currentPlayer: gameState.currentPlayer === 'white' ? 'black' : 'white',
-      moveHistory: [...gameState.moveHistory, move],
-      currentMoveIndex: gameState.moveHistory.length,
-    };
-
-    const { error } = await supabase.from('game_sessions').update({
-      game_state: newGameState as any,
-      current_player: newGameState.currentPlayer
-    }).eq('id', gameSession.id);
-
-    if (error) {
-      toast({ title: "Error", description: "Failed to make move.", variant: "destructive" });
-    } else {
-      setSelectedSquare(null);
+  const refetchGameSession = useCallback(async (id: string) => {
+    const { data, error } = await supabase.from('game_sessions').select('*').eq('id', id).single();
+    if (data) {
+      setGameSession(data);
+    } else if (error) {
+      toast({ title: "Error refreshing game", description: error.message, variant: "destructive" });
     }
-  }, [gameSession, gameState, playerColor]);
+  }, []);
 
   useEffect(() => {
     if (!sessionId) {
@@ -102,6 +79,9 @@ export function useMultiplayer() {
           }
           setPlayerPresence(newPresence);
         })
+        .on('broadcast', { event: 'player_joined' }, () => {
+          refetchGameSession(sessionId);
+        })
         .subscribe(async (status) => {
           if (status === 'SUBSCRIBED') {
             await channel.track({ player_id: playerId, color });
@@ -117,7 +97,7 @@ export function useMultiplayer() {
         channelRef.current = null;
       }
     };
-  }, [sessionId, playerId, setSearchParams]);
+  }, [sessionId, playerId, setSearchParams, refetchGameSession]);
 
   const createGame = useCallback(async (): Promise<string | null> => {
     const initialGameState = createInitialGameState();
@@ -151,12 +131,49 @@ export function useMultiplayer() {
         toast({ title: "Error", description: "Could not join game.", variant: "destructive" });
         return false;
       }
+      // Broadcast that a player has joined
+      const channel = supabase.channel(`game:${id}`);
+      await channel.subscribe();
+      await channel.send({ type: 'broadcast', event: 'player_joined', payload: {} });
+      supabase.removeChannel(channel);
     }
     return true;
   }, [playerId]);
 
   const leaveGame = () => {
     setSearchParams({});
+  };
+
+  const makeMove = async (from: Position, to: Position) => {
+    if (!gameSession || !gameState || playerColor === 'spectator' || gameState.currentPlayer !== playerColor) return;
+
+    const piece = gameState.board[from.row][from.col];
+    if (!piece) return;
+
+    const newBoard = cloneBoard(gameState.board);
+    newBoard[to.row][to.col] = piece;
+    newBoard[from.row][from.col] = null;
+    const boardWithGravity = applyGravity(newBoard);
+
+    const move: Move = { from, to, piece };
+    const newGameState: GameState = {
+      ...gameState,
+      board: boardWithGravity,
+      currentPlayer: gameState.currentPlayer === 'white' ? 'black' : 'white',
+      moveHistory: [...gameState.moveHistory, move],
+      currentMoveIndex: gameState.moveHistory.length,
+    };
+
+    const { error } = await supabase.from('game_sessions').update({
+      game_state: newGameState as any,
+      current_player: newGameState.currentPlayer
+    }).eq('id', gameSession.id);
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to make move.", variant: "destructive" });
+    } else {
+      setSelectedSquare(null);
+    }
   };
 
   const handleSquareClick = (row: number, col: number) => {
