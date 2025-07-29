@@ -42,6 +42,7 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
     }
   }, []);
 
+  // Effect for managing the real-time connection
   useEffect(() => {
     if (!sessionId) {
       setIsLoading(false);
@@ -55,25 +56,17 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
 
     const connectToGame = async () => {
       setIsLoading(true);
-
-      const { data: sessionData, error } = await supabase
-        .from('game_sessions')
-        .select('*')
-        .eq('id', sessionId)
-        .single();
-
+      const { data: sessionData, error } = await supabase.from('game_sessions').select('*').eq('id', sessionId).single();
       if (error || !sessionData) {
-        toast({ title: "Error", description: "Game not found or could not be loaded.", variant: "destructive" });
+        toast({ title: "Error", description: "Game not found.", variant: "destructive" });
         setIsLoading(false);
         return;
       }
-
       setGameSession(sessionData as GameSession);
 
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
       }
-
       const channel = supabase.channel(`game:${sessionId}`);
       channelRef.current = channel;
 
@@ -90,11 +83,11 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
           }
           setPlayerPresence(newPresence);
         })
-        .on('broadcast', { event: 'player_joined' }, () => {
+        .on('broadcast', { event: 'force_refetch' }, () => {
           refetchGameSession(sessionId);
         })
         .subscribe();
-
+      
       setIsLoading(false);
     };
 
@@ -108,6 +101,7 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
     };
   }, [sessionId, playerId, handleGameUpdate, refetchGameSession]);
 
+  // Effect for tracking player presence
   useEffect(() => {
     if (channelRef.current && channelRef.current.state === 'joined' && playerInfo) {
       channelRef.current.track({ player_id: playerId, color: playerInfo.color });
@@ -116,17 +110,7 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
 
   const createGame = useCallback(async (): Promise<string | null> => {
     const initialGameState = createInitialGameState();
-    const { data, error } = await supabase
-      .from('game_sessions')
-      .insert({
-        white_player_id: playerId,
-        game_state: initialGameState as any,
-        current_player: 'white',
-        status: 'waiting'
-      })
-      .select()
-      .single();
-
+    const { data, error } = await supabase.from('game_sessions').insert({ white_player_id: playerId, game_state: initialGameState as any, current_player: 'white', status: 'waiting' }).select().single();
     if (error) {
       toast({ title: "Error", description: "Could not create game.", variant: "destructive" });
       return null;
@@ -135,89 +119,43 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
   }, [playerId]);
 
   const joinGame = useCallback(async (joinSessionId: string): Promise<boolean> => {
-    const { data: existingSession, error: fetchError } = await supabase
-      .from('game_sessions')
-      .select('id, white_player_id, black_player_id')
-      .eq('id', joinSessionId)
-      .single();
-
+    const { data: existingSession, error: fetchError } = await supabase.from('game_sessions').select('id, white_player_id, black_player_id').eq('id', joinSessionId).single();
     if (fetchError || !existingSession) {
       toast({ title: "Error", description: "Game not found.", variant: "destructive" });
       return false;
     }
-
     if (existingSession.white_player_id === playerId || existingSession.black_player_id === playerId) {
       refetchGameSession(joinSessionId);
       return true;
     }
-
     if (!existingSession.black_player_id) {
-      const { error } = await supabase
-        .from('game_sessions')
-        .update({ black_player_id: playerId, status: 'active' })
-        .eq('id', joinSessionId);
-      
+      const { error } = await supabase.from('game_sessions').update({ black_player_id: playerId, status: 'active' }).eq('id', joinSessionId);
       if (error) {
         toast({ title: "Error", description: "Could not join game.", variant: "destructive" });
         return false;
       }
-      
       await refetchGameSession(joinSessionId);
-
       if (channelRef.current) {
-        channelRef.current.send({
-          type: 'broadcast',
-          event: 'player_joined',
-          payload: { joined_player_id: playerId },
-        });
+        channelRef.current.send({ type: 'broadcast', event: 'force_refetch', payload: {} });
       }
-      
       return true;
     }
-
     toast({ title: "Game Full", description: "This game is already full.", variant: "destructive" });
     return false;
   }, [playerId, refetchGameSession]);
 
   const makeMove = useCallback(async (move: Move) => {
-    if (!gameSession || !playerInfo || playerInfo.color === 'spectator' || gameSession.current_player !== playerInfo.color) {
-      return;
-    }
-
+    if (!gameSession || !playerInfo || playerInfo.color === 'spectator' || gameSession.current_player !== playerInfo.color) return;
     const currentBoard = cloneBoard(gameSession.game_state.board);
     currentBoard[move.to.row][move.to.col] = move.piece;
     currentBoard[move.from.row][move.from.col] = null;
     const boardWithGravity = applyGravity(currentBoard);
-
-    const newGameState: GameState = {
-      ...gameSession.game_state,
-      board: boardWithGravity,
-      currentPlayer: gameSession.current_player === 'white' ? 'black' : 'white',
-      moveHistory: [...gameSession.game_state.moveHistory, move],
-      currentMoveIndex: gameSession.game_state.moveHistory.length,
-    };
-
-    const { error } = await supabase
-      .from('game_sessions')
-      .update({
-        game_state: newGameState as any,
-        current_player: newGameState.currentPlayer
-      })
-      .eq('id', gameSession.id);
-
+    const newGameState: GameState = { ...gameSession.game_state, board: boardWithGravity, currentPlayer: gameSession.current_player === 'white' ? 'black' : 'white', moveHistory: [...gameSession.game_state.moveHistory, move], currentMoveIndex: gameSession.game_state.moveHistory.length };
+    const { error } = await supabase.from('game_sessions').update({ game_state: newGameState as any, current_player: newGameState.currentPlayer }).eq('id', gameSession.id);
     if (error) {
       toast({ title: "Error", description: "Failed to make move.", variant: "destructive" });
     }
   }, [gameSession, playerInfo]);
 
-  return {
-    gameSession,
-    gameState: gameSession?.game_state ?? null,
-    playerInfo,
-    playerPresence,
-    isLoading,
-    createGame,
-    joinGame,
-    makeMove,
-  };
+  return { gameSession, gameState: gameSession?.game_state ?? null, playerInfo, playerPresence, isLoading, createGame, joinGame, makeMove };
 }
