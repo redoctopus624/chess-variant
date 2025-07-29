@@ -127,19 +127,17 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
     }
 
     if (!existingSession.black_player_id) {
-      const { data: updatedSession, error } = await supabase
+      // Only perform the update. The realtime subscription will handle the state change.
+      const { error } = await supabase
         .from('game_sessions')
         .update({ black_player_id: playerId, status: 'active' })
-        .eq('id', joinSessionId)
-        .select()
-        .single();
+        .eq('id', joinSessionId);
       
-      if (error || !updatedSession) {
+      if (error) {
         toast({ title: "Error", description: "Could not join game.", variant: "destructive" });
         return false;
       }
-      
-      setGameSession(updatedSession as GameSession);
+      // The state will be updated by the realtime listener.
       return true;
     }
 
