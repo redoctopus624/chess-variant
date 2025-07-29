@@ -29,10 +29,27 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
     setGameSession(payload.new);
   }, []);
 
+  const refetchGameSession = useCallback(async (id: string) => {
+    const { data, error } = await supabase
+      .from('game_sessions')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) {
+      toast({ title: "Error", description: "Could not refresh game state.", variant: "destructive" });
+    } else if (data) {
+      setGameSession(data as GameSession);
+    }
+  }, []);
+
   useEffect(() => {
     if (!sessionId) {
       setIsLoading(false);
       setGameSession(null);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
       return;
     }
 
@@ -53,6 +70,10 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
 
       setGameSession(sessionData as GameSession);
 
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
+
       const channel = supabase.channel(`game:${sessionId}`);
       channelRef.current = channel;
 
@@ -69,7 +90,14 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
           }
           setPlayerPresence(newPresence);
         })
-        .subscribe();
+        .on('broadcast', { event: 'player_joined' }, () => {
+          refetchGameSession(sessionId);
+        })
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED' && playerInfo) {
+            channel.track({ player_id: playerId, color: playerInfo.color });
+          }
+        });
 
       setIsLoading(false);
     };
@@ -82,13 +110,7 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
         channelRef.current = null;
       }
     };
-  }, [sessionId, playerId, handleGameUpdate]);
-
-  useEffect(() => {
-    if (channelRef.current && channelRef.current.state === 'joined' && playerInfo) {
-      channelRef.current.track({ player_id: playerId, color: playerInfo.color });
-    }
-  }, [playerInfo, playerId]);
+  }, [sessionId, playerId, handleGameUpdate, refetchGameSession, playerInfo]);
 
   const createGame = useCallback(async (): Promise<string | null> => {
     const initialGameState = createInitialGameState();
@@ -123,29 +145,37 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
     }
 
     if (existingSession.white_player_id === playerId || existingSession.black_player_id === playerId) {
-      return true; // Already in the game
+      refetchGameSession(joinSessionId);
+      return true;
     }
 
     if (!existingSession.black_player_id) {
-      const { data: updatedSession, error } = await supabase
+      const { error } = await supabase
         .from('game_sessions')
         .update({ black_player_id: playerId, status: 'active' })
-        .eq('id', joinSessionId)
-        .select('*')
-        .single();
+        .eq('id', joinSessionId);
       
-      if (error || !updatedSession) {
+      if (error) {
         toast({ title: "Error", description: "Could not join game.", variant: "destructive" });
         return false;
       }
       
-      setGameSession(updatedSession as GameSession);
+      await refetchGameSession(joinSessionId);
+
+      if (channelRef.current) {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'player_joined',
+          payload: { joined_player_id: playerId },
+        });
+      }
+      
       return true;
     }
 
     toast({ title: "Game Full", description: "This game is already full.", variant: "destructive" });
     return false;
-  }, [playerId]);
+  }, [playerId, refetchGameSession]);
 
   const makeMove = useCallback(async (move: Move) => {
     if (!gameSession || !playerInfo || playerInfo.color === 'spectator' || gameSession.current_player !== playerInfo.color) {
