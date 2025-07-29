@@ -43,7 +43,7 @@ function wouldMoveExposeKing(board: (Piece | null)[][], move: Move): boolean {
 }
 
 export function useSimpleGameLogic(
-  gameState: GameState,
+  gameState: GameState | null,
   playerColor: 'white' | 'black' | null,
   isMyTurn: boolean,
   onMove: (move: Move) => void
@@ -52,17 +52,17 @@ export function useSimpleGameLogic(
 
   // Get possible moves for selected piece
   const possibleMoves = useMemo(() => {
-    if (!selectedSquare || !isMyTurn || !playerColor) return [];
+    if (!selectedSquare || !isMyTurn || !playerColor || !gameState) return [];
     const piece = getPieceAt(gameState.board, selectedSquare);
     if (!piece || piece.color !== playerColor) return [];
     
     const validMoves = getValidMoves(gameState.board, selectedSquare, piece, gameState.enPassantTarget, gameState.castlingRights);
     return validMoves.map(move => move.to);
-  }, [gameState.board, gameState.enPassantTarget, gameState.castlingRights, selectedSquare, isMyTurn, playerColor]);
+  }, [gameState, selectedSquare, isMyTurn, playerColor]);
 
   // Get dangerous moves (moves that would put own king in check)
   const dangerousMoves = useMemo(() => {
-    if (!selectedSquare || !isMyTurn || !playerColor) return [];
+    if (!selectedSquare || !isMyTurn || !playerColor || !gameState) return [];
     const piece = getPieceAt(gameState.board, selectedSquare);
     if (!piece || piece.color !== playerColor) return [];
     
@@ -75,26 +75,26 @@ export function useSimpleGameLogic(
       };
       return wouldMoveExposeKing(gameState.board, move);
     });
-  }, [gameState.board, selectedSquare, possibleMoves, isMyTurn, playerColor]);
+  }, [gameState, selectedSquare, possibleMoves, isMyTurn, playerColor]);
 
   // Check if king is in check
   const kingInCheck = useMemo(() => {
-    if (!playerColor) return null;
+    if (!playerColor || !gameState) return null;
     const kingPos = findKing(gameState.board, playerColor);
     if (!kingPos) return null;
     
     const opponentColor = playerColor === 'white' ? 'black' : 'white';
     return isSquareUnderAttack(gameState.board, kingPos, opponentColor) ? kingPos : null;
-  }, [gameState.board, playerColor]);
+  }, [gameState, playerColor]);
 
   // Get last move
   const lastMove = useMemo(() => {
-    if (gameState.moveHistory.length === 0) return null;
+    if (!gameState || gameState.moveHistory.length === 0) return null;
     return gameState.moveHistory[gameState.moveHistory.length - 1];
-  }, [gameState.moveHistory]);
+  }, [gameState]);
 
   const handleSquareClick = useCallback((row: number, col: number) => {
-    if (!isMyTurn || !playerColor) return;
+    if (!isMyTurn || !playerColor || !gameState) return;
 
     const clickedPosition: Position = { row, col };
     const clickedPiece = getPieceAt(gameState.board, clickedPosition);
@@ -141,7 +141,7 @@ export function useSimpleGameLogic(
         setSelectedSquare(null);
       }
     }
-  }, [selectedSquare, gameState.board, gameState.enPassantTarget, gameState.castlingRights, playerColor, isMyTurn, onMove]);
+  }, [selectedSquare, gameState, playerColor, isMyTurn, onMove]);
 
   return {
     selectedSquare,

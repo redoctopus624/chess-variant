@@ -45,7 +45,7 @@ const Index = () => {
     lastMove,
     handleSquareClick
   } = useSimpleGameLogic(
-    multiplayerGameState!,
+    multiplayerGameState,
     playerInfo?.color || null,
     !!isMyTurn,
     makeMove
