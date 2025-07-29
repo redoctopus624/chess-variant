@@ -7,80 +7,49 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "12.2.3 (519615d)"
   }
   public: {
     Tables: {
-      game_moves: {
+      game_sessions: {
         Row: {
-          created_at: string
-          game_id: string
           id: string
-          move_data: Json
-          move_number: number
-          player_id: string
-        }
-        Insert: {
-          created_at?: string
-          game_id: string
-          id?: string
-          move_data: Json
-          move_number: number
-          player_id: string
-        }
-        Update: {
-          created_at?: string
-          game_id?: string
-          id?: string
-          move_data?: Json
-          move_number?: number
-          player_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "game_moves_game_id_fkey"
-            columns: ["game_id"]
-            isOneToOne: false
-            referencedRelation: "game_rooms"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      game_rooms: {
-        Row: {
-          black_player_id: string | null
           created_at: string
-          current_player: string
-          game_state: Json
-          id: string
-          status: string
           updated_at: string
+          game_state: Json
+          current_player: string
+          white_player_connected: boolean | null
+          black_player_connected: boolean | null
+          status: string
           white_player_id: string | null
+          black_player_id: string | null
           winner: string | null
         }
         Insert: {
-          black_player_id?: string | null
-          created_at?: string
-          current_player?: string
-          game_state: Json
           id?: string
-          status?: string
+          created_at?: string
           updated_at?: string
+          game_state: Json
+          current_player?: string
+          white_player_connected?: boolean | null
+          black_player_connected?: boolean | null
+          status?: string
           white_player_id?: string | null
+          black_player_id?: string | null
           winner?: string | null
         }
         Update: {
-          black_player_id?: string | null
-          created_at?: string
-          current_player?: string
-          game_state?: Json
           id?: string
-          status?: string
+          created_at?: string
           updated_at?: string
+          game_state?: Json
+          current_player?: string
+          white_player_connected?: boolean | null
+          black_player_connected?: boolean | null
+          status?: string
           white_player_id?: string | null
+          black_player_id?: string | null
           winner?: string | null
         }
         Relationships: []

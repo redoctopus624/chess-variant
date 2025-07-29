@@ -30,7 +30,7 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
 
       // Fetch initial game data
       const { data: sessionData, error } = await supabase
-        .from('game_rooms')
+        .from('game_sessions')
         .select('*')
         .eq('id', sessionId)
         .single();
@@ -57,7 +57,7 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
       channelRef.current = channel;
 
       channel
-        .on<GameSession>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_rooms', filter: `id=eq.${sessionId}` }, handleGameUpdate)
+        .on<GameSession>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_sessions', filter: `id=eq.${sessionId}` }, handleGameUpdate)
         .on('presence', { event: 'sync' }, () => {
           const presenceState = channel.presenceState();
           const newPresence = { white: false, black: false };
@@ -91,7 +91,7 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
   const createGame = useCallback(async (): Promise<string | null> => {
     const initialGameState = createInitialGameState();
     const { data, error } = await supabase
-      .from('game_rooms')
+      .from('game_sessions')
       .insert({
         white_player_id: playerId,
         game_state: initialGameState as any,
@@ -110,7 +110,7 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
 
   const joinGame = useCallback(async (joinSessionId: string): Promise<boolean> => {
     const { data, error } = await supabase
-      .from('game_rooms')
+      .from('game_sessions')
       .update({ black_player_id: playerId, status: 'active' })
       .eq('id', joinSessionId)
       .is('black_player_id', null)
@@ -143,7 +143,7 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
     };
 
     const { error } = await supabase
-      .from('game_rooms')
+      .from('game_sessions')
       .update({
         game_state: newGameState as any,
         current_player: newGameState.currentPlayer
