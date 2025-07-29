@@ -1,105 +1,65 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useParams } from 'react-router-dom';
 import { ChessBoard } from '@/components/ChessBoard';
-import { DebugPanel } from '@/components/DebugPanel';
-import { ConnectionStatus } from '@/components/ConnectionStatus';
-import { useMultiplayerDebug } from '@/hooks/useMultiplayerDebug';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from '@/hooks/use-toast';
+import { ConnectionDebugger } from '@/components/ConnectionDebugger';
+import { useMultiplayerConnection } from '@/hooks/useMultiplayerConnection';
+import { Button } from '@/components/ui/button';
+import { Loader2 } from 'lucide-react';
 
 export function MultiplayerGame() {
   const { gameId } = useParams();
-  const [gameState, setGameState] = useState(null);
-  const [connectionState, setConnectionState] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
-  const { connectionLog, events } = useMultiplayerDebug(gameId || '');
+  const {
+    gameState,
+    connectionState,
+    debugLog,
+    reconnect
+  } = useMultiplayerConnection(gameId);
 
-  useEffect(() => {
-    const loadGame = async () => {
-      try {
-        setConnectionState('connecting');
-        
-        // 1. Check if game exists
-        const { data, error } = await supabase
-          .from('game_sessions')
-          .select('*')
-          .eq('id', gameId)
-          .single();
-
-        if (error || !data) {
-          throw new Error(error?.message || 'Game not found');
-        }
-
-        // 2. Set initial state
-        setGameState(data.game_state);
-        setConnectionState('connected');
-
-        // 3. Set up real-time updates
-        const channel = supabase
-          .channel(`game_${gameId}`)
-          .on('postgres_changes', {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'game_sessions',
-            filter: `id=eq.${gameId}`
-          }, (payload) => {
-            setGameState(payload.new.game_state);
-          })
-          .subscribe(status => {
-            if (status === 'SUBSCRIBED') {
-              setConnectionState('connected');
-            } else {
-              setConnectionState('disconnected');
-            }
-          });
-
-        return () => {
-          supabase.removeChannel(channel);
-        };
-      } catch (err) {
-        setConnectionState('disconnected');
-        toast({
-          title: "Connection Error",
-          description: err.message,
-          variant: "destructive"
-        });
-      }
-    };
-
-    if (gameId) {
-      loadGame();
-    }
-
-    return () => {
-      setConnectionState('disconnected');
-    };
-  }, [gameId]);
+  if (connectionState.status === 'error') {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen">
+        <h1 className="text-2xl font-bold mb-4">Connection Failed</h1>
+        <p className="text-red-500 mb-6">{connectionState.error?.message}</p>
+        <Button onClick={reconnect}>
+          Try Again
+        </Button>
+      </div>
+    );
+  }
 
   return (
-    <div className="relative">
-      <ConnectionStatus status={connectionState} />
-      
-      <h1>Gravity Chess</h1>
-      <p>Where physics meets strategy - pieces fall to their gravity zones!</p>
-      
-      {gameState ? (
-        <ChessBoard board={gameState.board} />
-      ) : (
-        <div className="text-center py-8">
-          {connectionState === 'connecting' ? (
-            <p>Connecting to game...</p>
-          ) : (
-            <p>Failed to load game. Please check the link.</p>
-          )}
-        </div>
-      )}
+    <div className="relative min-h-screen p-4">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-3xl font-bold mb-2">Gravity Chess</h1>
+        <p className="text-gray-500 mb-6">
+          {gameId ? `Game ID: ${gameId}` : 'No game ID provided'}
+        </p>
 
-      <DebugPanel 
-        gameState={gameState}
-        connectionState={{
-          status: connectionState,
-          logs: connectionLog,
-          events
-        }}
+        {connectionState.status === 'connecting' && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="animate-spin mr-2" />
+            Connecting to game...
+          </div>
+        )}
+
+        {gameState && connectionState.status === 'connected' ? (
+          <ChessBoard 
+            board={gameState.board}
+            // Pass other required props
+          />
+        ) : (
+          <div className="text-center py-12 text-gray-500">
+            {connectionState.status === 'disconnected' 
+              ? 'Connection lost. Trying to reconnect...' 
+              : 'Loading game...'}
+          </div>
+        )}
+      </div>
+
+      <ConnectionDebugger 
+        status={connectionState.status} 
+        logs={debugLog}
+        onRefresh={reconnect}
       />
     </div>
   );
