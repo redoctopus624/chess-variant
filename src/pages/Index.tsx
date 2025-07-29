@@ -1,123 +1,30 @@
-import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React, { useState } from 'react';
 import { ChessBoard } from '@/components/ChessBoard';
 import { GameControls } from '@/components/GameControls';
 import { GameInfo } from '@/components/GameInfo';
 import { PromotionDialog } from '@/components/PromotionDialog';
-import { SimpleLobby } from '@/components/SimpleLobby';
-import { SimpleGameBoard } from '@/components/SimpleGameBoard';
+import { MultiplayerManager } from '@/components/MultiplayerManager';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { RotateCcw, Users, User, Loader2 } from 'lucide-react';
+import { RotateCcw, Users, User } from 'lucide-react';
 import { useGravityChess } from '@/hooks/useGravityChess';
-import { useSupabaseMultiplayer } from '@/hooks/useSupabaseMultiplayer';
-import { useSimpleGameLogic } from '@/hooks/useSimpleGameLogic';
+import { useSearchParams } from 'react-router-dom';
 
 const Index = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const sessionIdFromUrl = searchParams.get('game');
-  
-  const [gameMode, setGameMode] = useState<'single' | 'multi'>(sessionIdFromUrl ? 'multi' : 'single');
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(sessionIdFromUrl);
+  const gameModeFromUrl = searchParams.get('game') ? 'multi' : 'single';
+  const [gameMode, setGameMode] = useState<'single' | 'multi'>(gameModeFromUrl);
 
   // Single player game hook
   const singlePlayerGame = useGravityChess();
 
-  // Multiplayer hooks
-  const {
-    gameSession,
-    gameState: multiplayerGameState,
-    playerInfo,
-    playerPresence,
-    isLoading,
-    createGame,
-    joinGame,
-    makeMove
-  } = useSupabaseMultiplayer(currentSessionId);
-
-  const isMyTurn = playerInfo && multiplayerGameState && multiplayerGameState.currentPlayer === playerInfo.color;
-
-  const {
-    selectedSquare,
-    possibleMoves,
-    dangerousMoves,
-    kingInCheck,
-    lastMove,
-    handleSquareClick
-  } = useSimpleGameLogic(
-    multiplayerGameState,
-    playerInfo?.color || null,
-    !!isMyTurn,
-    makeMove
-  );
-
-  useEffect(() => {
-    if (sessionIdFromUrl) {
-      if (currentSessionId !== sessionIdFromUrl) {
-        setCurrentSessionId(sessionIdFromUrl);
-      }
-      setGameMode('multi');
-    } else {
-      setGameMode('single');
-      if (currentSessionId) {
-        setCurrentSessionId(null);
-      }
+  const handleTabChange = (value: string) => {
+    const newMode = value as 'single' | 'multi';
+    setGameMode(newMode);
+    if (newMode === 'single') {
+      // Clear game param when switching to single player
+      setSearchParams({});
     }
-  }, [sessionIdFromUrl, currentSessionId]);
-
-  const handleCreateGame = async () => {
-    const newSessionId = await createGame();
-    if (newSessionId) {
-      setCurrentSessionId(newSessionId);
-      setSearchParams({ game: newSessionId });
-    }
-  };
-
-  const handleJoinGame = async (sessionId: string) => {
-    const success = await joinGame(sessionId);
-    if (success) {
-      setCurrentSessionId(sessionId);
-      setSearchParams({ game: sessionId });
-    }
-  };
-
-  const handleLeaveGame = () => {
-    setCurrentSessionId(null);
-    setSearchParams({});
-  };
-
-  const renderMultiplayer = () => {
-    if (isLoading) {
-      return (
-        <div className="flex justify-center items-center p-16">
-          <Loader2 className="h-8 w-8 animate-spin mr-4" />
-          <span className="text-xl text-muted-foreground">Loading Game...</span>
-        </div>
-      );
-    }
-    if (gameSession && playerInfo && multiplayerGameState) {
-      return (
-        <SimpleGameBoard
-          gameSession={gameSession}
-          gameState={multiplayerGameState}
-          playerInfo={playerInfo}
-          playerPresence={playerPresence}
-          selectedSquare={selectedSquare}
-          possibleMoves={possibleMoves}
-          dangerousMoves={dangerousMoves}
-          onSquareClick={handleSquareClick}
-          kingInCheck={kingInCheck}
-          lastMove={lastMove}
-          onLeaveGame={handleLeaveGame}
-        />
-      );
-    }
-    return (
-      <SimpleLobby 
-        onCreateGame={handleCreateGame}
-        onJoinGame={handleJoinGame}
-      />
-    );
   };
 
   return (
@@ -132,13 +39,7 @@ const Index = () => {
           </p>
         </div>
 
-        <Tabs value={gameMode} onValueChange={(value) => {
-          const newMode = value as 'single' | 'multi';
-          setGameMode(newMode);
-          if (newMode === 'single') {
-            handleLeaveGame();
-          }
-        }}>
+        <Tabs value={gameMode} onValueChange={handleTabChange}>
           <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-2">
             <TabsTrigger value="single" className="flex items-center gap-2">
               <User className="w-4 h-4" />
@@ -198,7 +99,7 @@ const Index = () => {
             </div>
           </TabsContent>
           <TabsContent value="multi" className="mt-6">
-            {renderMultiplayer()}
+            <MultiplayerManager />
           </TabsContent>
         </Tabs>
 
