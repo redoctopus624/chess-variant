@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { GameState, Move } from '@/types/chess';
 import { GameSession, PlayerInfo } from '@/types/multiplayer';
@@ -9,11 +9,21 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 
 export function useSupabaseMultiplayer(sessionId: string | null) {
   const [gameSession, setGameSession] = useState<GameSession | null>(null);
-  const [playerInfo, setPlayerInfo] = useState<PlayerInfo | null>(null);
   const [playerPresence, setPlayerPresence] = useState<{ white: boolean; black: boolean }>({ white: false, black: false });
   const [isLoading, setIsLoading] = useState(true);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const playerId = getPlayerId();
+
+  const playerInfo: PlayerInfo | null = useMemo(() => {
+    if (!gameSession || !playerId) return null;
+    if (gameSession.white_player_id === playerId) {
+      return { id: playerId, color: 'white' };
+    }
+    if (gameSession.black_player_id === playerId) {
+      return { id: playerId, color: 'black' };
+    }
+    return { id: playerId, color: 'spectator' };
+  }, [gameSession, playerId]);
 
   const handleGameUpdate = useCallback((payload: { new: GameSession }) => {
     setGameSession(payload.new);
@@ -22,13 +32,13 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
   useEffect(() => {
     if (!sessionId) {
       setIsLoading(false);
+      setGameSession(null);
       return;
     }
 
     const connectToGame = async () => {
       setIsLoading(true);
 
-      // Fetch initial game data
       const { data: sessionData, error } = await supabase
         .from('game_sessions')
         .select('*')
@@ -43,16 +53,6 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
 
       setGameSession(sessionData as GameSession);
 
-      // Determine player role
-      if (sessionData.white_player_id === playerId) {
-        setPlayerInfo({ id: playerId, color: 'white' });
-      } else if (sessionData.black_player_id === playerId) {
-        setPlayerInfo({ id: playerId, color: 'black' });
-      } else {
-        setPlayerInfo({ id: playerId, color: 'spectator' });
-      }
-
-      // Subscribe to Realtime channel
       const channel = supabase.channel(`game:${sessionId}`);
       channelRef.current = channel;
 
@@ -62,18 +62,14 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
           const presenceState = channel.presenceState();
           const newPresence = { white: false, black: false };
           for (const id in presenceState) {
-            const presences = presenceState[id] as unknown as { color: 'white' | 'black' }[];
-            if (presences[0].color === 'white') newPresence.white = true;
-            if (presences[0].color === 'black') newPresence.black = true;
+            const presences = presenceState[id] as unknown as { color: 'white' | 'black' | 'spectator' }[];
+            const userColor = presences[0]?.color;
+            if (userColor === 'white') newPresence.white = true;
+            if (userColor === 'black') newPresence.black = true;
           }
           setPlayerPresence(newPresence);
         })
-        .subscribe(async (status) => {
-          if (status === 'SUBSCRIBED') {
-            const color = sessionData.white_player_id === playerId ? 'white' : sessionData.black_player_id === playerId ? 'black' : 'spectator';
-            await channel.track({ player_id: playerId, color });
-          }
-        });
+        .subscribe();
 
       setIsLoading(false);
     };
@@ -87,6 +83,12 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
       }
     };
   }, [sessionId, playerId, handleGameUpdate]);
+
+  useEffect(() => {
+    if (channelRef.current && channelRef.current.state === 'joined' && playerInfo) {
+      channelRef.current.track({ player_id: playerId, color: playerInfo.color });
+    }
+  }, [playerInfo, playerId]);
 
   const createGame = useCallback(async (): Promise<string | null> => {
     const initialGameState = createInitialGameState();
@@ -109,19 +111,36 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
   }, [playerId]);
 
   const joinGame = useCallback(async (joinSessionId: string): Promise<boolean> => {
-    const { data, error } = await supabase
+    const { data: existingSession, error: fetchError } = await supabase
       .from('game_sessions')
-      .update({ black_player_id: playerId, status: 'active' })
+      .select('id, white_player_id, black_player_id')
       .eq('id', joinSessionId)
-      .is('black_player_id', null)
-      .select()
       .single();
 
-    if (error || !data) {
-      toast({ title: "Error", description: "Could not join game. It might be full or no longer exist.", variant: "destructive" });
+    if (fetchError || !existingSession) {
+      toast({ title: "Error", description: "Game not found.", variant: "destructive" });
       return false;
     }
-    return true;
+
+    if (existingSession.white_player_id === playerId || existingSession.black_player_id === playerId) {
+      return true; // Already in the game
+    }
+
+    if (!existingSession.black_player_id) {
+      const { error } = await supabase
+        .from('game_sessions')
+        .update({ black_player_id: playerId, status: 'active' })
+        .eq('id', joinSessionId);
+      
+      if (error) {
+        toast({ title: "Error", description: "Could not join game.", variant: "destructive" });
+        return false;
+      }
+      return true;
+    }
+
+    toast({ title: "Game Full", description: "This game is already full.", variant: "destructive" });
+    return false;
   }, [playerId]);
 
   const makeMove = useCallback(async (move: Move) => {
