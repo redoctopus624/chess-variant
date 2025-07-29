@@ -2,101 +2,105 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { ChessBoard } from '@/components/ChessBoard';
 import { DebugPanel } from '@/components/DebugPanel';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
+import { useMultiplayerDebug } from '@/hooks/useMultiplayerDebug';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 
 export function MultiplayerGame() {
   const { gameId } = useParams();
   const [gameState, setGameState] = useState(null);
-  const [connectionState, setConnectionState] = useState({
-    connected: false,
-    loading: true,
-    error: null
-  });
-  const [error, setError] = useState<Error | null>(null);
+  const [connectionState, setConnectionState] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
+  const { connectionLog, events } = useMultiplayerDebug(gameId || '');
 
   useEffect(() => {
     const loadGame = async () => {
       try {
-        setConnectionState({ connected: false, loading: true, error: null });
+        setConnectionState('connecting');
         
-        // Fetch initial game state
-        const { data, error: fetchError } = await supabase
+        // 1. Check if game exists
+        const { data, error } = await supabase
           .from('game_sessions')
           .select('*')
           .eq('id', gameId)
           .single();
 
-        if (fetchError) throw fetchError;
-        if (!data) throw new Error('Game not found');
+        if (error || !data) {
+          throw new Error(error?.message || 'Game not found');
+        }
 
+        // 2. Set initial state
         setGameState(data.game_state);
-        setConnectionState({ connected: true, loading: false, error: null });
+        setConnectionState('connected');
 
-        // Set up real-time subscription
-        const subscription = supabase
-          .channel(`game:${gameId}`)
-          .on(
-            'postgres_changes',
-            {
-              event: 'UPDATE',
-              schema: 'public',
-              table: 'game_sessions',
-              filter: `id=eq.${gameId}`
-            },
-            (payload) => {
-              setGameState(payload.new.game_state);
+        // 3. Set up real-time updates
+        const channel = supabase
+          .channel(`game_${gameId}`)
+          .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'game_sessions',
+            filter: `id=eq.${gameId}`
+          }, (payload) => {
+            setGameState(payload.new.game_state);
+          })
+          .subscribe(status => {
+            if (status === 'SUBSCRIBED') {
+              setConnectionState('connected');
+            } else {
+              setConnectionState('disconnected');
             }
-          )
-          .subscribe();
+          });
 
         return () => {
-          supabase.removeChannel(subscription);
+          supabase.removeChannel(channel);
         };
       } catch (err) {
-        console.error('Game load error:', err);
-        setError(err);
-        setConnectionState({ connected: false, loading: false, error: err.message });
+        setConnectionState('disconnected');
+        toast({
+          title: "Connection Error",
+          description: err.message,
+          variant: "destructive"
+        });
       }
     };
 
-    loadGame();
+    if (gameId) {
+      loadGame();
+    }
+
+    return () => {
+      setConnectionState('disconnected');
+    };
   }, [gameId]);
-
-  if (connectionState.loading) {
-    return <div>Loading game...</div>;
-  }
-
-  if (error) {
-    return (
-      <div className="text-red-500 p-4">
-        <h2>Error loading game</h2>
-        <p>{error.message}</p>
-      </div>
-    );
-  }
 
   return (
     <div className="relative">
+      <ConnectionStatus status={connectionState} />
+      
       <h1>Gravity Chess</h1>
       <p>Where physics meets strategy - pieces fall to their gravity zones!</p>
       
       {gameState ? (
-        <ChessBoard 
-          board={gameState.board}
-          // ... other props
-        />
+        <ChessBoard board={gameState.board} />
       ) : (
-        <div>Waiting for game data...</div>
+        <div className="text-center py-8">
+          {connectionState === 'connecting' ? (
+            <p>Connecting to game...</p>
+          ) : (
+            <p>Failed to load game. Please check the link.</p>
+          )}
+        </div>
       )}
 
-      {/* Debug panel - can be toggled in production with a query param */}
-      {(process.env.NODE_ENV === 'development' || window.location.search.includes('debug=true')) && (
-        <DebugPanel 
-          gameState={gameState}
-          connectionState={connectionState}
-          error={error}
-        />
-      )}
+      <DebugPanel 
+        gameState={gameState}
+        connectionState={{
+          status: connectionState,
+          logs: connectionLog,
+          events
+        }}
+      />
     </div>
   );
 }
