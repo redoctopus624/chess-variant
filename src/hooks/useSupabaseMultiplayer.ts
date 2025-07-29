@@ -93,11 +93,7 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
         .on('broadcast', { event: 'player_joined' }, () => {
           refetchGameSession(sessionId);
         })
-        .subscribe((status) => {
-          if (status === 'SUBSCRIBED' && playerInfo) {
-            channel.track({ player_id: playerId, color: playerInfo.color });
-          }
-        });
+        .subscribe();
 
       setIsLoading(false);
     };
@@ -110,7 +106,13 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
         channelRef.current = null;
       }
     };
-  }, [sessionId, playerId, handleGameUpdate, refetchGameSession, playerInfo]);
+  }, [sessionId, playerId, handleGameUpdate, refetchGameSession]);
+
+  useEffect(() => {
+    if (channelRef.current && channelRef.current.state === 'joined' && playerInfo) {
+      channelRef.current.track({ player_id: playerId, color: playerInfo.color });
+    }
+  }, [playerInfo, playerId]);
 
   const createGame = useCallback(async (): Promise<string | null> => {
     const initialGameState = createInitialGameState();
