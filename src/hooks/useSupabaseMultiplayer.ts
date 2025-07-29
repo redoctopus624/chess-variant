@@ -29,58 +29,69 @@ export function useSupabaseMultiplayer(sessionId: string | null) {
     const { data, error } = await supabase.from('game_sessions').select('*').eq('id', id).single();
     if (data) {
       setGameSession(data as GameSession);
+    } else if (error) {
+      toast({ title: "Error", description: "Could not refresh game state.", variant: "destructive" });
     }
   }, []);
 
+  // Main effect for managing the channel connection, depends only on sessionId.
   useEffect(() => {
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
-    }
-
-    if (sessionId) {
-      setIsLoading(true);
-      const channel = supabase.channel(`game:${sessionId}`);
-      channelRef.current = channel;
-
-      channel
-        .on<GameSession>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_sessions', filter: `id=eq.${sessionId}` }, (payload) => {
-          setGameSession(payload.new);
-        })
-        .on('presence', { event: 'sync' }, () => {
-          const presenceState = channel.presenceState();
-          const newPresence = { white: false, black: false };
-          for (const id in presenceState) {
-            const presences = presenceState[id] as unknown as { color: 'white' | 'black' | 'spectator' }[];
-            const userColor = presences[0]?.color;
-            if (userColor === 'white') newPresence.white = true;
-            if (userColor === 'black') newPresence.black = true;
-          }
-          setPlayerPresence(newPresence);
-        })
-        .on('broadcast', { event: 'force_refetch' }, () => {
-          refetchGameSession(sessionId);
-        })
-        .subscribe(async (status) => {
-          if (status === 'SUBSCRIBED') {
-            await refetchGameSession(sessionId);
-            setIsLoading(false);
-            if (playerInfo) {
-              await channel.track({ player_id: playerId, color: playerInfo.color });
-            }
-          }
-        });
-    } else {
+    if (!sessionId) {
       setIsLoading(false);
       setGameSession(null);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+      return;
     }
+
+    setIsLoading(true);
+    refetchGameSession(sessionId).finally(() => setIsLoading(false));
+
+    const channel = supabase.channel(`game:${sessionId}`);
+    channelRef.current = channel;
+
+    const onUpdate = (payload: { new: GameSession }) => {
+      setGameSession(payload.new);
+    };
+
+    const onPresenceSync = () => {
+      const presenceState = channel.presenceState();
+      const newPresence = { white: false, black: false };
+      for (const id in presenceState) {
+        const presences = presenceState[id] as unknown as { color: 'white' | 'black' | 'spectator' }[];
+        const userColor = presences[0]?.color;
+        if (userColor === 'white') newPresence.white = true;
+        if (userColor === 'black') newPresence.black = true;
+      }
+      setPlayerPresence(newPresence);
+    };
+
+    const onForceRefetch = () => {
+      refetchGameSession(sessionId);
+    };
+
+    channel
+      .on<GameSession>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_sessions', filter: `id=eq.${sessionId}` }, onUpdate)
+      .on('presence', { event: 'sync' }, onPresenceSync)
+      .on('broadcast', { event: 'force_refetch' }, onForceRefetch)
+      .subscribe();
 
     return () => {
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
       }
     };
-  }, [sessionId, playerId, playerInfo, refetchGameSession]);
+  }, [sessionId, refetchGameSession]);
+
+  // Separate effect for tracking presence when playerInfo is determined.
+  useEffect(() => {
+    if (playerInfo && channelRef.current && channelRef.current.state === 'joined') {
+      channelRef.current.track({ player_id: playerId, color: playerInfo.color });
+    }
+  }, [playerInfo, playerId]);
 
   const createGame = useCallback(async (): Promise<string | null> => {
     const initialGameState = createInitialGameState();
