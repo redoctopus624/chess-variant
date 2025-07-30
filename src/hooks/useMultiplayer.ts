@@ -23,46 +23,39 @@ export function useMultiplayer() {
 
   const gameState = gameSession?.game_state as GameState | null;
 
-  const refetchGameSession = useCallback(async (id: string) => {
-    const { data, error } = await supabase.from('game_sessions').select('*').eq('id', id).single();
-    if (data) {
-      setGameSession(data);
-    } else if (error) {
-      toast({ title: "Error refreshing game", description: error.message, variant: "destructive" });
+  // Effect to derive player color whenever the game session or player ID changes
+  useEffect(() => {
+    if (gameSession && playerId) {
+      if (gameSession.white_player_id === playerId) {
+        setPlayerColor('white');
+      } else if (gameSession.black_player_id === playerId) {
+        setPlayerColor('black');
+      } else {
+        setPlayerColor('spectator');
+      }
     }
-  }, []);
+  }, [gameSession, playerId]);
 
+  // Effect to handle URL changes and manage the real-time channel
   useEffect(() => {
     if (!sessionId) {
-      setGameSession(null);
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
+      setGameSession(null);
       return;
     }
 
-    let channel: RealtimeChannel;
-
-    const setup = async () => {
-      setIsLoading(true);
-      const { data, error } = await supabase.from('game_sessions').select('*').eq('id', sessionId).single();
-      setIsLoading(false);
-
-      if (error || !data) {
-        toast({ title: "Error", description: "Game not found.", variant: "destructive" });
-        setSearchParams({});
+    const setupChannel = () => {
+      if (channelRef.current && channelRef.current.topic === `realtime:game:${sessionId}`) {
         return;
       }
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
 
-      setGameSession(data);
-
-      let color: PieceColor | 'spectator' = 'spectator';
-      if (data.white_player_id === playerId) color = 'white';
-      else if (data.black_player_id === playerId) color = 'black';
-      setPlayerColor(color);
-
-      channel = supabase.channel(`game:${sessionId}`);
+      const channel = supabase.channel(`game:${sessionId}`);
       channelRef.current = channel;
 
       channel
@@ -79,17 +72,27 @@ export function useMultiplayer() {
           }
           setPlayerPresence(newPresence);
         })
-        .on('broadcast', { event: 'player_joined' }, () => {
-          refetchGameSession(sessionId);
-        })
         .subscribe(async (status) => {
           if (status === 'SUBSCRIBED') {
-            await channel.track({ player_id: playerId, color });
+            await channel.track({ player_id: playerId, color: playerColor });
           }
         });
     };
 
-    setup();
+    if (!gameSession || gameSession.id !== sessionId) {
+      setIsLoading(true);
+      supabase.from('game_sessions').select('*').eq('id', sessionId).single()
+        .then(({ data, error }) => {
+          if (error || !data) {
+            toast({ title: "Error", description: "Game not found.", variant: "destructive" });
+            setSearchParams({});
+          } else {
+            setGameSession(data);
+          }
+        }).finally(() => setIsLoading(false));
+    }
+    
+    setupChannel();
 
     return () => {
       if (channelRef.current) {
@@ -97,9 +100,10 @@ export function useMultiplayer() {
         channelRef.current = null;
       }
     };
-  }, [sessionId, playerId, setSearchParams, refetchGameSession]);
+  }, [sessionId, playerColor, gameSession, setSearchParams, playerId]);
 
-  const createGame = useCallback(async (): Promise<string | null> => {
+  const createGame = useCallback(async () => {
+    setIsLoading(true);
     const initialGameState = createInitialGameState();
     const { data, error } = await supabase.from('game_sessions').insert({
       white_player_id: playerId,
@@ -108,37 +112,54 @@ export function useMultiplayer() {
       status: 'waiting'
     }).select().single();
 
+    setIsLoading(false);
     if (error || !data) {
       toast({ title: "Error", description: "Could not create game.", variant: "destructive" });
-      return null;
+      return;
     }
-    return data.id;
-  }, [playerId]);
+    setGameSession(data);
+    setSearchParams({ game: data.id });
+  }, [playerId, setSearchParams]);
 
-  const joinGame = useCallback(async (id: string): Promise<boolean> => {
+  const joinGame = useCallback(async (id: string) => {
+    setIsLoading(true);
     const { data: existing, error: fetchError } = await supabase.from('game_sessions').select('*').eq('id', id).single();
+
     if (fetchError || !existing) {
       toast({ title: "Error", description: "Game not found.", variant: "destructive" });
-      return false;
+      setIsLoading(false);
+      return;
     }
-    if (existing.black_player_id && existing.black_player_id !== playerId && existing.white_player_id !== playerId) {
+
+    if (existing.white_player_id === playerId || existing.black_player_id === playerId) {
+      setGameSession(existing);
+      setSearchParams({ game: id });
+      setIsLoading(false);
+      return;
+    }
+
+    if (existing.black_player_id) {
       toast({ title: "Game Full", description: "This game is already full.", variant: "destructive" });
-      return false;
+      setIsLoading(false);
+      return;
     }
-    if (!existing.black_player_id && existing.white_player_id !== playerId) {
-      const { error } = await supabase.from('game_sessions').update({ black_player_id: playerId, status: 'active' }).eq('id', id);
-      if (error) {
-        toast({ title: "Error", description: "Could not join game.", variant: "destructive" });
-        return false;
-      }
-      // Broadcast that a player has joined
-      const channel = supabase.channel(`game:${id}`);
-      await channel.subscribe();
-      await channel.send({ type: 'broadcast', event: 'player_joined', payload: {} });
-      supabase.removeChannel(channel);
+
+    const { data: updatedSession, error: updateError } = await supabase
+      .from('game_sessions')
+      .update({ black_player_id: playerId, status: 'active' })
+      .eq('id', id)
+      .select()
+      .single();
+
+    setIsLoading(false);
+    if (updateError || !updatedSession) {
+      toast({ title: "Error", description: "Could not join game.", variant: "destructive" });
+      return;
     }
-    return true;
-  }, [playerId]);
+
+    setGameSession(updatedSession);
+    setSearchParams({ game: id });
+  }, [playerId, setSearchParams]);
 
   const leaveGame = () => {
     setSearchParams({});

@@ -1,20 +1,16 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useMultiplayer } from '@/hooks/useMultiplayer';
 import { MultiplayerLobby } from './MultiplayerLobby';
 import { MultiplayerGame } from './MultiplayerGame';
 import { Loader2 } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
 
 export function MultiplayerManager() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [isLobbyLoading, setIsLobbyLoading] = useState(false);
-
   const {
     gameSession,
     gameState,
     playerColor,
     playerPresence,
-    isLoading: isGameLoading,
+    isLoading,
     createGame,
     joinGame,
     leaveGame,
@@ -26,30 +22,11 @@ export function MultiplayerManager() {
     lastMove,
   } = useMultiplayer();
 
-  const handleCreateGame = async () => {
-    setIsLobbyLoading(true);
-    const newGameId = await createGame();
-    if (newGameId) {
-      setSearchParams({ game: newGameId });
-    }
-    setIsLobbyLoading(false);
-  };
-
-  const handleJoinGame = async (id: string) => {
-    if (!id.trim()) return;
-    setIsLobbyLoading(true);
-    const success = await joinGame(id);
-    if (success) {
-      setSearchParams({ game: id });
-    }
-    setIsLobbyLoading(false);
-  };
-
-  if (isGameLoading) {
+  if (isLoading && !gameSession) {
     return (
       <div className="flex justify-center items-center p-16">
         <Loader2 className="h-8 w-8 animate-spin mr-4" />
-        <span className="text-xl text-muted-foreground">Loading Game...</span>
+        <span className="text-xl text-muted-foreground">Loading...</span>
       </div>
     );
   }
@@ -74,9 +51,9 @@ export function MultiplayerManager() {
 
   return (
     <MultiplayerLobby
-      onCreateGame={handleCreateGame}
-      onJoinGame={handleJoinGame}
-      isLoading={isLobbyLoading}
+      onCreateGame={createGame}
+      onJoinGame={joinGame}
+      isLoading={isLoading}
     />
   );
 }
