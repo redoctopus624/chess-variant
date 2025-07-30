@@ -30,17 +30,16 @@ export function useRealtimeGravityChess(gameId: string) {
   const [isFlipped, setIsFlipped] = useState(false);
 
   const playerSessionId = useRef(getPlayerSessionId());
-  const isProcessingMove = useRef(false);
 
   const updateRemoteGameState = useCallback(async (newState: GameState) => {
-    isProcessingMove.current = true;
     const { error } = await supabase
       .from('game_sessions')
       .update({ 
         game_state: newState as any, 
         current_player: newState.currentPlayer,
         status: newState.gameOver ? 'finished' : 'active',
-        winner: newState.winner
+        winner: newState.winner,
+        last_updated_by: playerSessionId.current // Include the session ID of the player who made the move
       })
       .eq('id', gameId);
     
@@ -48,8 +47,6 @@ export function useRealtimeGravityChess(gameId: string) {
       console.error("Error updating game state:", error);
       toast({ title: "Error", description: "Could not save your move.", variant: "destructive" });
     }
-    // A small delay to ensure the update propagates before allowing local state to be overwritten by remote
-    setTimeout(() => { isProcessingMove.current = false; }, 1500);
   }, [gameId]);
 
   const wouldPutOwnKingInCheck = useCallback((board: (Piece | null)[][], from: Position, to: Position, piece: Piece): boolean => {
@@ -292,9 +289,8 @@ export function useRealtimeGravityChess(gameId: string) {
 
       const channel = supabase.channel(`game:${gameId}`);
       channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_sessions', filter: `id=eq.${gameId}` }, (payload) => {
-        // Only update if the change is not from this client's move processing
-        if (isProcessingMove.current) {
-          isProcessingMove.current = false; // Reset after a short grace period
+        // Only update if the change is not from this client's move (using last_updated_by)
+        if (payload.new.last_updated_by === playerSessionId.current) {
           return;
         }
         const newGameState = payload.new.game_state as GameState;
@@ -309,7 +305,7 @@ export function useRealtimeGravityChess(gameId: string) {
     };
 
     joinAndSubscribe();
-  }, [gameId]); // Removed playerColor from dependencies to prevent unnecessary re-runs
+  }, [gameId, playerColor]); // Added playerColor to dependencies to ensure re-run if player color changes
 
   const kingInCheckMemo = useMemo(() => {
     const whiteKing = findKing(gameState.board, 'white');
