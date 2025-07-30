@@ -33,8 +33,8 @@ export function useRealtimeGravityChess(gameId: string) {
   const playerColorRef = useRef<PieceColor | null>(null); // Ref to hold the latest playerColor
 
   const updateRemoteGameState = useCallback(async (newState: GameState) => {
-    console.log("Attempting to update remote game state with:", newState);
-    console.log("My session ID for update:", playerSessionId.current);
+    console.log("[Realtime] Attempting to update remote game state with:", newState);
+    console.log("[Realtime] My session ID for update:", playerSessionId.current);
     const { error } = await supabase
       .from('game_sessions')
       .update({ 
@@ -47,10 +47,10 @@ export function useRealtimeGravityChess(gameId: string) {
       .eq('id', gameId);
     
     if (error) {
-      console.error("Error updating game state:", error);
+      console.error("[Realtime] Error updating game state:", error);
       toast({ title: "Error", description: "Could not save your move.", variant: "destructive" });
     } else {
-      console.log("Remote game state update successful.");
+      console.log("[Realtime] Remote game state update successful.");
     }
   }, [gameId]);
 
@@ -83,7 +83,6 @@ export function useRealtimeGravityChess(gameId: string) {
       return finalRow === 3 || afterGravity[finalRow + 1][to.col] !== null;
     }
     if (piece.color === 'black' && finalRow >= 4) {
-      // FIX: Changed 'col' to 'to.col'
       return finalRow === 4 || afterGravity[finalRow - 1][to.col] !== null;
     }
     return true;
@@ -234,8 +233,8 @@ export function useRealtimeGravityChess(gameId: string) {
       return;
     }
 
-    console.log("Initializing/Re-initializing useRealtimeGravityChess for gameId:", gameId);
-    console.log("My player session ID:", playerSessionId.current);
+    console.log("[Realtime] Initializing/Re-initializing useRealtimeGravityChess for gameId:", gameId);
+    console.log("[Realtime] My player session ID:", playerSessionId.current);
 
     const joinAndSubscribe = async () => {
       setIsLoading(true);
@@ -244,7 +243,7 @@ export function useRealtimeGravityChess(gameId: string) {
       const { data: gameData, error: fetchError } = await supabase.from('game_sessions').select('*').eq('id', gameId).single();
 
       if (fetchError || !gameData) {
-        console.error("Error fetching game data:", fetchError);
+        console.error("[Realtime] Error fetching game data:", fetchError);
         setError("Game not found or could not be loaded.");
         setIsLoading(false);
         return;
@@ -252,7 +251,7 @@ export function useRealtimeGravityChess(gameId: string) {
 
       // Ensure game_state is valid before setting
       if (!gameData.game_state) {
-        console.error("Fetched game data has no game_state:", gameData);
+        console.error("[Realtime] Fetched game data has no game_state:", gameData);
         setError("Game state is corrupted or missing.");
         setIsLoading(false);
         return;
@@ -285,10 +284,10 @@ export function useRealtimeGravityChess(gameId: string) {
       if (assignedPlayerColor === 'black') setIsFlipped(true);
 
       if (Object.keys(updatePayload).length > 0) {
-        console.log("Updating player connection status in DB:", updatePayload);
+        console.log("[Realtime] Updating player connection status in DB:", updatePayload);
         const { error: updateError } = await supabase.from('game_sessions').update(updatePayload).eq('id', gameId);
         if (updateError) {
-          console.error("Error updating player connection status:", updateError);
+          console.error("[Realtime] Error updating player connection status:", updateError);
           // Don't block loading if this update fails, but log it.
         }
       }
@@ -297,25 +296,24 @@ export function useRealtimeGravityChess(gameId: string) {
       // Set lastMove based on the fetched game state's history
       setLastMove(gameData.game_state.moveHistory[gameData.game_state.moveHistory.length - 1] || null);
       setIsLoading(false);
-      console.log("Initial game state loaded. Player color:", assignedPlayerColor);
+      console.log("[Realtime] Initial game state loaded. Player color:", assignedPlayerColor);
 
       const channel = supabase.channel(`game:${gameId}`);
       channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_sessions', filter: `id=eq.${gameId}` }, (payload) => {
-        console.log('Realtime update received:', payload.new);
-        console.log('My session ID:', playerSessionId.current);
-        console.log('Last updated by (from payload):', payload.new.last_updated_by);
-        console.log('Comparison result (payload.new.last_updated_by === playerSessionId.current):', payload.new.last_updated_by === playerSessionId.current);
+        const updaterId = payload.new.last_updated_by;
+        const myId = playerSessionId.current;
+        console.log(`[Realtime] Update received. Updater: ${updaterId}, My ID: ${myId}`);
 
-        if (payload.new.last_updated_by === playerSessionId.current) {
-          console.log('Ignoring own update.');
+        if (updaterId === myId) {
+          console.log('[Realtime] Ignoring own update (updater ID matches my ID).');
           return;
         }
+        console.log('[Realtime] Processing opponent\'s update.');
         const newGameState = payload.new.game_state as GameState;
+        console.log('[Realtime] New game state from payload:', newGameState);
         setGameState(newGameState);
         setLastMove(newGameState.moveHistory[newGameState.moveHistory.length - 1] || null);
-        console.log('Opponent move received. New current player:', newGameState.currentPlayer);
-        console.log('My player color (ref):', playerColorRef.current);
-        console.log('Is it my turn now?', newGameState.currentPlayer === playerColorRef.current);
+        console.log(`[Realtime] Opponent move applied. New current player: ${newGameState.currentPlayer}, My color: ${playerColorRef.current}`);
 
         // Use the *current* playerColor from the ref
         if (newGameState.currentPlayer === playerColorRef.current && !newGameState.gameOver) {
@@ -326,13 +324,13 @@ export function useRealtimeGravityChess(gameId: string) {
       }).subscribe();
 
       return () => { 
-        console.log("Unsubscribing from channel:", `game:${gameId}`);
+        console.log("[Realtime] Unsubscribing from channel:", `game:${gameId}`);
         supabase.removeChannel(channel); 
       };
     };
 
     joinAndSubscribe();
-  }, [gameId]); // Removed playerColor from dependencies to prevent unnecessary re-runs
+  }, [gameId]);
 
   const kingInCheckMemo = useMemo(() => {
     const whiteKing = findKing(gameState.board, 'white');
