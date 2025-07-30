@@ -23,7 +23,6 @@ export function useMultiplayer() {
 
   const gameState = gameSession?.game_state as GameState | null;
 
-  // Effect to derive player color whenever the game session or player ID changes
   useEffect(() => {
     if (gameSession && playerId) {
       if (gameSession.white_player_id === playerId) {
@@ -36,24 +35,32 @@ export function useMultiplayer() {
     }
   }, [gameSession, playerId]);
 
-  // Effect to handle URL changes and manage the real-time channel
   useEffect(() => {
     if (!sessionId) {
+      setGameSession(null);
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
-      setGameSession(null);
       return;
     }
 
-    const setupChannel = () => {
-      if (channelRef.current && channelRef.current.topic === `realtime:game:${sessionId}`) {
+    const refetchGameSession = async () => {
+      const { data } = await supabase.from('game_sessions').select('*').eq('id', sessionId).single();
+      if (data) setGameSession(data);
+    };
+
+    const setupChannel = async () => {
+      setIsLoading(true);
+      const { data, error } = await supabase.from('game_sessions').select('*').eq('id', sessionId).single();
+      setIsLoading(false);
+
+      if (error || !data) {
+        toast({ title: "Error", description: "Game not found.", variant: "destructive" });
+        setSearchParams({});
         return;
       }
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-      }
+      setGameSession(data);
 
       const channel = supabase.channel(`game:${sessionId}`);
       channelRef.current = channel;
@@ -72,6 +79,10 @@ export function useMultiplayer() {
           }
           setPlayerPresence(newPresence);
         })
+        .on('broadcast', { event: 'player_joined' }, () => {
+          toast({ title: "Opponent Joined!", description: "Your game is ready to start." });
+          refetchGameSession();
+        })
         .subscribe(async (status) => {
           if (status === 'SUBSCRIBED') {
             await channel.track({ player_id: playerId, color: playerColor });
@@ -79,19 +90,6 @@ export function useMultiplayer() {
         });
     };
 
-    if (!gameSession || gameSession.id !== sessionId) {
-      setIsLoading(true);
-      supabase.from('game_sessions').select('*').eq('id', sessionId).single()
-        .then(({ data, error }) => {
-          if (error || !data) {
-            toast({ title: "Error", description: "Game not found.", variant: "destructive" });
-            setSearchParams({});
-          } else {
-            setGameSession(data);
-          }
-        }).finally(() => setIsLoading(false));
-    }
-    
     setupChannel();
 
     return () => {
@@ -100,7 +98,7 @@ export function useMultiplayer() {
         channelRef.current = null;
       }
     };
-  }, [sessionId, playerColor, gameSession, setSearchParams, playerId]);
+  }, [sessionId, playerId, playerColor, setSearchParams]);
 
   const createGame = useCallback(async () => {
     setIsLoading(true);
@@ -117,7 +115,6 @@ export function useMultiplayer() {
       toast({ title: "Error", description: "Could not create game.", variant: "destructive" });
       return;
     }
-    setGameSession(data);
     setSearchParams({ game: data.id });
   }, [playerId, setSearchParams]);
 
@@ -132,7 +129,6 @@ export function useMultiplayer() {
     }
 
     if (existing.white_player_id === playerId || existing.black_player_id === playerId) {
-      setGameSession(existing);
       setSearchParams({ game: id });
       setIsLoading(false);
       return;
@@ -151,14 +147,22 @@ export function useMultiplayer() {
       .select()
       .single();
 
-    setIsLoading(false);
     if (updateError || !updatedSession) {
       toast({ title: "Error", description: "Could not join game.", variant: "destructive" });
+      setIsLoading(false);
       return;
     }
 
-    setGameSession(updatedSession);
+    const channel = supabase.channel(`game:${id}`);
+    await channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await channel.send({ type: 'broadcast', event: 'player_joined', payload: {} });
+        supabase.removeChannel(channel);
+      }
+    });
+
     setSearchParams({ game: id });
+    setIsLoading(false);
   }, [playerId, setSearchParams]);
 
   const leaveGame = () => {
