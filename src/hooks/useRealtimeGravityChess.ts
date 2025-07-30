@@ -300,6 +300,7 @@ export function useRealtimeGravityChess(gameId: string) {
 
       const channel = supabase.channel(`game:${gameId}`);
       channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_sessions', filter: `id=eq.${gameId}` }, (payload) => {
+        console.log("[Realtime] Raw payload received:", payload); // NEW LOG
         const updaterId = payload.new.last_updated_by;
         const myId = playerSessionId.current;
         console.log(`[Realtime] Update received. Updater: ${updaterId}, My ID: ${myId}`);
