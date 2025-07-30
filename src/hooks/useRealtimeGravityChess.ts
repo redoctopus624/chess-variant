@@ -48,6 +48,7 @@ export function useRealtimeGravityChess(gameId: string) {
       console.error("Error updating game state:", error);
       toast({ title: "Error", description: "Could not save your move.", variant: "destructive" });
     }
+    // A small delay to ensure the update propagates before allowing local state to be overwritten by remote
     setTimeout(() => { isProcessingMove.current = false; }, 1500);
   }, [gameId]);
 
@@ -232,10 +233,21 @@ export function useRealtimeGravityChess(gameId: string) {
 
     const joinAndSubscribe = async () => {
       setIsLoading(true);
+      setError(null); // Clear previous errors
+
       const { data: gameData, error: fetchError } = await supabase.from('game_sessions').select('*').eq('id', gameId).single();
 
       if (fetchError || !gameData) {
-        setError("Game not found.");
+        console.error("Error fetching game data:", fetchError);
+        setError("Game not found or could not be loaded.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Ensure game_state is valid before setting
+      if (!gameData.game_state) {
+        console.error("Fetched game data has no game_state:", gameData);
+        setError("Game state is corrupted or missing.");
         setIsLoading(false);
         return;
       }
@@ -250,6 +262,7 @@ export function useRealtimeGravityChess(gameId: string) {
       } else if (gameData.black_player_id === myId) {
         currentPlayerColor = 'black';
         if (!gameData.black_player_connected) updatePayload.black_player_connected = true;
+        updatePayload.status = 'active'; // Set status to active when second player joins
       } else if (!gameData.white_player_id) {
         currentPlayerColor = 'white';
         updatePayload.white_player_id = myId;
@@ -258,23 +271,30 @@ export function useRealtimeGravityChess(gameId: string) {
         currentPlayerColor = 'black';
         updatePayload.black_player_id = myId;
         updatePayload.black_player_connected = true;
-        updatePayload.status = 'active';
+        updatePayload.status = 'active'; // Set status to active when second player joins
       }
 
       setPlayerColor(currentPlayerColor);
       if (currentPlayerColor === 'black') setIsFlipped(true);
 
       if (Object.keys(updatePayload).length > 0) {
-        await supabase.from('game_sessions').update(updatePayload).eq('id', gameId);
+        const { error: updateError } = await supabase.from('game_sessions').update(updatePayload).eq('id', gameId);
+        if (updateError) {
+          console.error("Error updating player connection status:", updateError);
+          // Don't block loading if this update fails, but log it.
+        }
       }
 
       setGameState(gameData.game_state as GameState);
+      // Set lastMove based on the fetched game state's history
+      setLastMove(gameData.game_state.moveHistory[gameData.game_state.moveHistory.length - 1] || null);
       setIsLoading(false);
 
       const channel = supabase.channel(`game:${gameId}`);
       channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_sessions', filter: `id=eq.${gameId}` }, (payload) => {
+        // Only update if the change is not from this client's move processing
         if (isProcessingMove.current) {
-          isProcessingMove.current = false;
+          isProcessingMove.current = false; // Reset after a short grace period
           return;
         }
         const newGameState = payload.new.game_state as GameState;
@@ -289,7 +309,7 @@ export function useRealtimeGravityChess(gameId: string) {
     };
 
     joinAndSubscribe();
-  }, [gameId, playerColor]);
+  }, [gameId]); // Removed playerColor from dependencies to prevent unnecessary re-runs
 
   const kingInCheckMemo = useMemo(() => {
     const whiteKing = findKing(gameState.board, 'white');
@@ -298,10 +318,6 @@ export function useRealtimeGravityChess(gameId: string) {
     if (blackKing && isSquareUnderAttack(gameState.board, blackKing, 'white')) return blackKing;
     return null;
   }, [gameState.board]);
-
-  useEffect(() => {
-    setKingInCheck(kingInCheckMemo);
-  }, [kingInCheckMemo]);
 
   const toggleBoardFlip = useCallback(() => setIsFlipped(prev => !prev), []);
 
@@ -312,7 +328,7 @@ export function useRealtimeGravityChess(gameId: string) {
     dangerousMoves,
     promotionState,
     lastMove,
-    kingInCheck,
+    kingInCheck: kingInCheckMemo, 
     isFlipped,
     playerColor,
     isLoading,
