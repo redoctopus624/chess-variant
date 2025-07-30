@@ -78,7 +78,7 @@ export function useRealtimeGravityChess(gameId: string) {
       return finalRow === 3 || afterGravity[finalRow + 1][to.col] !== null;
     }
     if (piece.color === 'black' && finalRow >= 4) {
-      return finalRow === 4 || afterGravity[finalRow - 1][to.col] !== null;
+      return finalRow === 4 || afterGravity[finalRow - 1][col] !== null;
     }
     return true;
   }, []);
@@ -296,6 +296,7 @@ export function useRealtimeGravityChess(gameId: string) {
         const newGameState = payload.new.game_state as GameState;
         setGameState(newGameState);
         setLastMove(newGameState.moveHistory[newGameState.moveHistory.length - 1] || null);
+        // Use the *current* playerColor from the state, not the closure
         if (newGameState.currentPlayer === playerColor && !newGameState.gameOver) {
           toast({ title: "Your Turn!", description: "Your opponent has made their move." });
         }
@@ -305,7 +306,7 @@ export function useRealtimeGravityChess(gameId: string) {
     };
 
     joinAndSubscribe();
-  }, [gameId, playerColor]); // Added playerColor to dependencies to ensure re-run if player color changes
+  }, [gameId]); // Removed playerColor from dependencies to prevent unnecessary re-runs
 
   const kingInCheckMemo = useMemo(() => {
     const whiteKing = findKing(gameState.board, 'white');

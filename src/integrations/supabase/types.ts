@@ -25,6 +25,7 @@ export type Database = {
           white_player_id: string | null
           black_player_id: string | null
           winner: string | null
+          last_updated_by: string | null // Added this line
         }
         Insert: {
           id?: string
@@ -38,6 +39,7 @@ export type Database = {
           white_player_id?: string | null
           black_player_id?: string | null
           winner?: string | null
+          last_updated_by?: string | null // Added this line
         }
         Update: {
           id?: string
@@ -51,6 +53,7 @@ export type Database = {
           white_player_id?: string | null
           black_player_id?: string | null
           winner?: string | null
+          last_updated_by?: string | null // Added this line
         }
         Relationships: []
       }
@@ -82,7 +85,7 @@ export type Tables<
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+        DatabaseWithoutInternals[DefaultTableNameOrOptions["schema"]]["Views"])
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
