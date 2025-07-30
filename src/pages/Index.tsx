@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ChessBoard } from '@/components/ChessBoard';
 import { GameControls } from '@/components/GameControls';
