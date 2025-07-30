@@ -30,6 +30,7 @@ export function useRealtimeGravityChess(gameId: string) {
   const [isFlipped, setIsFlipped] = useState(false);
 
   const playerSessionId = useRef(getPlayerSessionId());
+  const playerColorRef = useRef<PieceColor | null>(null); // Ref to hold the latest playerColor
 
   const updateRemoteGameState = useCallback(async (newState: GameState) => {
     const { error } = await supabase
@@ -78,7 +79,7 @@ export function useRealtimeGravityChess(gameId: string) {
       return finalRow === 3 || afterGravity[finalRow + 1][to.col] !== null;
     }
     if (piece.color === 'black' && finalRow >= 4) {
-      return finalRow === 4 || afterGravity[finalRow - 1][col] !== null;
+      return finalRow === 4 || afterGravity[finalRow - 1][to.col] !== null;
     }
     return true;
   }, []);
@@ -249,30 +250,31 @@ export function useRealtimeGravityChess(gameId: string) {
         return;
       }
 
-      let currentPlayerColor: PieceColor | null = null;
+      let assignedPlayerColor: PieceColor | null = null;
       const myId = playerSessionId.current;
       let updatePayload: any = {};
 
       if (gameData.white_player_id === myId) {
-        currentPlayerColor = 'white';
+        assignedPlayerColor = 'white';
         if (!gameData.white_player_connected) updatePayload.white_player_connected = true;
       } else if (gameData.black_player_id === myId) {
-        currentPlayerColor = 'black';
+        assignedPlayerColor = 'black';
         if (!gameData.black_player_connected) updatePayload.black_player_connected = true;
         updatePayload.status = 'active'; // Set status to active when second player joins
       } else if (!gameData.white_player_id) {
-        currentPlayerColor = 'white';
+        assignedPlayerColor = 'white';
         updatePayload.white_player_id = myId;
         updatePayload.white_player_connected = true;
       } else if (!gameData.black_player_id) {
-        currentPlayerColor = 'black';
+        assignedPlayerColor = 'black';
         updatePayload.black_player_id = myId;
         updatePayload.black_player_connected = true;
         updatePayload.status = 'active'; // Set status to active when second player joins
       }
 
-      setPlayerColor(currentPlayerColor);
-      if (currentPlayerColor === 'black') setIsFlipped(true);
+      setPlayerColor(assignedPlayerColor);
+      playerColorRef.current = assignedPlayerColor; // Update the ref
+      if (assignedPlayerColor === 'black') setIsFlipped(true);
 
       if (Object.keys(updatePayload).length > 0) {
         const { error: updateError } = await supabase.from('game_sessions').update(updatePayload).eq('id', gameId);
@@ -296,8 +298,8 @@ export function useRealtimeGravityChess(gameId: string) {
         const newGameState = payload.new.game_state as GameState;
         setGameState(newGameState);
         setLastMove(newGameState.moveHistory[newGameState.moveHistory.length - 1] || null);
-        // Use the *current* playerColor from the state, not the closure
-        if (newGameState.currentPlayer === playerColor && !newGameState.gameOver) {
+        // Use the *current* playerColor from the ref
+        if (newGameState.currentPlayer === playerColorRef.current && !newGameState.gameOver) {
           toast({ title: "Your Turn!", description: "Your opponent has made their move." });
         }
       }).subscribe();
